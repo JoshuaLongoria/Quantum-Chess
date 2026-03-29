@@ -87,7 +87,7 @@ quantum_chess/
 |---|---|---|
 | Person A | Quantum Backend | `quantum_engine.py`, `entanglement.py` |
 | Person B | Game Logic | `board.py`, `quantum_rules.py`, `game_manager.py` |
-| Person C | UI & Visualization | `renderer.py`, `ui_components.py`, `main.py` |
+| Joshua Longoria | UI & Visualization | `renderer.py`, `ui_components.py`, `main.py` |
 
 ### Shared Data Contract
 
