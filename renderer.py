@@ -748,4 +748,5 @@ if __name__ == "__main__":
  
     # Clean up Pygame resources before exiting
     pygame.quit()
-    sys.exit()
+    sys.exit()  
+# Board drawing, piece rendering, superposition visuals
