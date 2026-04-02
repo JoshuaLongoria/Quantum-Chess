@@ -85,7 +85,7 @@ quantum_chess/
 
 | Member | Role | Owns |
 |---|---|---|
-| Person A | Quantum Backend | `quantum_engine.py`, `entanglement.py` |
+| Lavneet Hora | Quantum Backend | `quantum_engine.py`, `entanglement.py` |
 | Luis Baeza | Game Logic | `board.py`, `quantum_rules.py`, `game_manager.py` |
 | Joshua Longoria | UI & Visualization | `renderer.py`, `ui_components.py`, `main.py` |
 
