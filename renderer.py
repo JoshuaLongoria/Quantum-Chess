@@ -315,11 +315,8 @@ def draw_entanglement_line(screen: pygame.Surface,
     screen.blit(end_surf, (0, 0))
  
  
-# ---------------------------------------------------------------------------
-# Drawing helpers — Quantum State HUD
-# ---------------------------------------------------------------------------
- 
-def render_frame(screen: pygame.Surface, game_state: dict, tick: int): #uses ui_components.py 
+# render_frame is the main function Person C will call from main.py each frame to draw everything.
+def render_frame(screen: pygame.Surface, game_state: dict, tick: int):  
     """
     Render one complete frame of the Quantum Chess game.
  
@@ -401,13 +398,13 @@ def render_frame(screen: pygame.Surface, game_state: dict, tick: int): #uses ui_
 
  
 # ---------------------------------------------------------------------------
-# Demo — run this file directly to see the renderer in action
+# ***   END OF RENDERER MODULE - MAIN FUNCTION BELOW IS JUST A STANDALONE DEMO   ***
 # ---------------------------------------------------------------------------
  
 if __name__ == "__main__":
 
     #Standalone demo: renders a sample board state so you can see all the
-    #visual features without needing the full game_manager running.
+    #visual features without needing the full **game_manager** running.
     #Run with:  python renderer.py
     #Press ESC or close the window to quit.
     # Create the window
@@ -468,6 +465,12 @@ if __name__ == "__main__":
     # --- Game loop -------------------------------------------------------
     # The game loop runs continuously until the player quits.
     # Each iteration = one frame.
+    # For the game loop structure, see the comments in the main.py file. The pattern is the same:
+    # 1. Handle events (keyboard, mouse, window)
+    # 2. Update game state (not needed in this demo since state is static)
+    # 3. Render the frame (call render_frame with current state)
+    # 4. Show the frame (pygame.display.flip())
+    # 5. Tick the clock to maintain a steady frame rate (60 FPS)
 
     tick = 0
     running = True
