@@ -32,86 +32,9 @@ Dependencies: pygame, math, typing
 import pygame
 import math
 import sys
-
-#---Window Layout---
-pygame.init()
-BOARD_COLS = 8
-BOARD_ROWS = 8
-SQUARE_SIZE = 80
-
-BOARD_OFFSET_X = 60
-BOARD_OFFSET_Y = 60
-BOARD_PX = SQUARE_SIZE * BOARD_COLS 
-HUD_WIDTH = 280
-LABEL_PAD = 30
-
-WINDOW_WIDTH = BOARD_OFFSET_X + BOARD_PX + HUD_WIDTH + 40
-WINDOW_HEIGHT = BOARD_OFFSET_Y + BOARD_PX + LABEL_PAD + 20
-
-#---Color Palette---
-# Dark, moody colors for a quantum chess vibe
-
-BG_COLOR = (15, 18, 35)          
-BOARD_LIGHT = ( 44, 62, 95)
-BOARD_DARK = ( 22, 33, 58)
-BOARD_BORDER = ( 80, 100, 140)
-
-PIECE_WHITE = (230, 235, 245)
-PIECE_BLACK = ( 30, 35, 55)
-PIECE_OUTLINE = (90, 110, 150)
-
-GHOST_WHITE = (180, 200, 240)
-GHOST_BLACK = (60, 75, 120)
-GHOST_ALPHA = 110 #GHOST PIECES 
-
-ENTANGLE_COLOR = (80, 220, 255) 
-ENTANGLE_ALPHA = 160
-ENTANGLE_PULSE = True 
-
-SELECTED_COLOR = (255, 215, 0) 
-VALID_MOVE_COLOR = (80, 200, 120)
-CHECK_COLOR = (220, 60, 60)
-
-HUD_BG = (20, 25, 48)
-HUD_BORDER = (50, 70, 120)
-HUD_TITLE = (180, 200, 255)
-HUD_TEXT = (160, 175, 210)
-HUD_ACCENT = (255, 215, 0)
-HUD_SUPERPOSE = (80, 180, 255)
-HUD_ENTANGLE = (80, 220, 255)
-
-LABEL_COLOR = (100, 120, 160)
-
-# --- Typography -----------------------------------------------------------
-FONT_PIECE_SIZE  = 44    # piece symbol font size
-FONT_LABEL_SIZE  = 16    # board coordinate labels (a-h, 1-8)
-FONT_HUD_TITLE   = 15    # HUD section headings
-FONT_HUD_BODY    = 13    # HUD body text
- 
-# Pygame uses system fonts; "segoeuisymbol" renders chess Unicode well on Windows.
-# "dejavusans" works cross-platform. We fall back gracefully.
-FONT_PIECE   = pygame.font.SysFont("segoeuisymbol, dejavusans, symbola", FONT_PIECE_SIZE)
-FONT_LABEL   = pygame.font.SysFont("consolas, monospace", FONT_LABEL_SIZE)
-FONT_HUD_T   = pygame.font.SysFont("consolas, monospace", FONT_HUD_TITLE, bold=True)
-FONT_HUD_B   = pygame.font.SysFont("consolas, monospace", FONT_HUD_BODY)
- 
-# --- Chess piece Unicode symbols ------------------------------------------
-# These render as actual chess piece glyphs in most system fonts.
-PIECE_SYMBOLS = {
-    ("king",   "white"): "♔",
-    ("queen",  "white"): "♕",
-    ("rook",   "white"): "♖",
-    ("bishop", "white"): "♗",
-    ("knight", "white"): "♘",
-    ("pawn",   "white"): "♙",
-    ("king",   "black"): "♚",
-    ("queen",  "black"): "♛",
-    ("rook",   "black"): "♜",
-    ("bishop", "black"): "♝",
-    ("knight", "black"): "♞",
-    ("pawn",   "black"): "♟",
-}
- 
+from board import to_grid
+from constants import *
+from ui_components import draw_hud, _get_entangled_pairs
  
 # ---------------------------------------------------------------------------
 # Coordinate helpers
@@ -141,23 +64,6 @@ def square_center(col: int, row: int) -> tuple[int, int]:
     x, y = square_to_pixel(col, row)
     return x + SQUARE_SIZE // 2, y + SQUARE_SIZE // 2
  
- 
-def algebraic_to_grid(pos: str) -> tuple[int, int]:
-    """
-    Convert algebraic notation (e.g. 'e4') to grid (col, row).
- 
-    'a' = col 0, 'h' = col 7
-    Rank '8' = row 0 (top), rank '1' = row 7 (bottom)
- 
-    Args:
-        pos: Algebraic square like 'e4', 'a1', 'h8'
- 
-    Returns:
-        (col, row) grid coordinates
-    """
-    col = ord(pos[0]) - ord('a')        # 'a'=0, 'b'=1 ... 'h'=7
-    row = 8 - int(pos[1])               # '8'=0 (top), '1'=7 (bottom)
-    return col, row
  
  
 # ---------------------------------------------------------------------------
@@ -256,7 +162,7 @@ def draw_valid_move_dots(screen: pygame.Surface, moves: list[str]):
         moves: List of algebraic square strings like ['e4', 'f5'].
     """
     for pos in moves:
-        col, row = algebraic_to_grid(pos)
+        col, row = to_grid(pos)
         # Draw a filled circle — radius 10 for empty squares, ring for occupied
         dot_surf = pygame.Surface((SQUARE_SIZE, SQUARE_SIZE), pygame.SRCALPHA)
         pygame.draw.circle(dot_surf, (*VALID_MOVE_COLOR, 140),
@@ -373,8 +279,8 @@ def draw_entanglement_line(screen: pygame.Surface,
         pos_b: Algebraic position of second entangled piece (e.g. 'g6').
         tick: Current frame count — used to drive the pulse animation.
     """
-    col_a, row_a = algebraic_to_grid(pos_a)
-    col_b, row_b = algebraic_to_grid(pos_b)
+    col_a, row_a = to_grid(pos_a)
+    col_b, row_b = to_grid(pos_b)
     cx_a, cy_a = square_center(col_a, row_a)
     cx_b, cy_b = square_center(col_b, row_b)
  
@@ -413,158 +319,7 @@ def draw_entanglement_line(screen: pygame.Surface,
 # Drawing helpers — Quantum State HUD
 # ---------------------------------------------------------------------------
  
-def draw_hud(screen: pygame.Surface, pieces: list[dict], tick: int):
-    """
-    Draw the Quantum State HUD panel on the right side of the screen.
- 
-    The HUD shows:
-      - Current turn (White / Black)
-      - List of pieces currently in superposition with their two positions
-      - List of currently entangled piece pairs
-      - Latest quantum event log entry (e.g. "Knight collapsed to e4")
- 
-    This panel is what makes the quantum state visible and understandable
-    to the audience during your presentation.
- 
-    Args:
-        screen: Main display surface.
-        pieces: List of all piece dicts (from game_manager).
-        tick: Current frame count for animations.
-    """
-    # --- HUD background panel -------------------------------------------
-
-    hud_x = BOARD_OFFSET_X + BOARD_PX + 20
-    hud_y = BOARD_OFFSET_Y
-    hud_h = BOARD_PX
- 
-    # Panel background
-    hud_rect = pygame.Rect(hud_x, hud_y, HUD_WIDTH - 20, hud_h)
-    panel_surf = pygame.Surface((HUD_WIDTH - 20, hud_h), pygame.SRCALPHA)
-    panel_surf.fill((*HUD_BG, 230))
-    screen.blit(panel_surf, (hud_x, hud_y))
- 
-    # Panel border
-    pygame.draw.rect(screen, HUD_BORDER, hud_rect, width=1, border_radius=6)
- 
-    # --- Title bar -------------------------------------------------------
-    title_bar = pygame.Rect(hud_x, hud_y, HUD_WIDTH - 20, 34)
-    pygame.draw.rect(screen, (30, 40, 80), title_bar, border_radius=6)
-    title = FONT_HUD_T.render("⟨ψ| QUANTUM STATE |ψ⟩", True, HUD_TITLE)
-    screen.blit(title, (hud_x + 10, hud_y + 8))
- 
-    cursor_y = hud_y + 46   # tracks vertical position as we add HUD elements
- 
-    def hud_section(label: str):
-        """Helper: draw a section label with a subtle divider line."""
-        nonlocal cursor_y
-        cursor_y += 8
-        pygame.draw.line(screen, HUD_BORDER,
-                         (hud_x + 8, cursor_y), (hud_x + HUD_WIDTH - 30, cursor_y))
-        cursor_y += 4
-        lbl = FONT_HUD_T.render(label, True, HUD_TITLE)
-        screen.blit(lbl, (hud_x + 10, cursor_y))
-        cursor_y += 22
- 
-    def hud_line(text: str, color=None, indent: int = 10):
-        """Helper: draw a single line of HUD body text."""
-        nonlocal cursor_y
-        color = color or HUD_TEXT
-        rendered = FONT_HUD_B.render(text, True, color)
-        screen.blit(rendered, (hud_x + indent, cursor_y))
-        cursor_y += 18
- 
-    # --- Section: Superposition -----------------------------------------
-    hud_section("SUPERPOSITION")
-    superposed = [p for p in pieces if p.get("superposed")]
-    if superposed:
-        for p in superposed:
-            pos_list = " ↔ ".join(p.get("positions", ["?"]))
-            symbol = PIECE_SYMBOLS.get((p["type"], p["color"]), "?")
-            hud_line(f"  {symbol} {p['color'][:1].upper()} {p['type']}", HUD_SUPERPOSE)
-            hud_line(f"    {pos_list}", HUD_TEXT, indent=20)
-    else:
-        hud_line("  No pieces in superposition", HUD_TEXT)
- 
-    # --- Section: Entanglement ------------------------------------------
-    hud_section("ENTANGLEMENT")
-    entangled_pairs = _get_entangled_pairs(pieces)
-    if entangled_pairs:
-        for pa, pb in entangled_pairs:
-            sym_a = PIECE_SYMBOLS.get((pa["type"], pa["color"]), "?")
-            sym_b = PIECE_SYMBOLS.get((pb["type"], pb["color"]), "?")
-            pos_a = pa.get("positions", ["?"])[0]
-            pos_b = pb.get("positions", ["?"])[0]
-            # Pulsing color for entanglement entries
-            pulse = math.sin(tick * 0.05)
-            hud_line(f"  {sym_a}{pos_a} ⟷ {sym_b}{pos_b}", HUD_ENTANGLE)
-    else:
-        hud_line("  No entangled pairs", HUD_TEXT)
- 
-    # --- Section: Quantum Event Log ------------------------------------
-    hud_section("LAST EVENT")
-
-
-    # In your final game, pass real event messages from game_manager.
-    # For now, these are example placeholder messages.
-
-
-    demo_events = [
-        "Knight split → e4 ↔ g5",
-        "Rook entangled with Bishop",
-        "Pawn collapsed → d5",
-    ]
-    for ev in demo_events[-2:]:   # show last 2 events
-        hud_line(f"  {ev}", HUD_ACCENT)
- 
-    # --- Footer: IBM Quantum status indicator --------------------------
-
-    cursor_y = hud_y + hud_h - 36
-    pygame.draw.line(screen, HUD_BORDER,
-                     (hud_x + 8, cursor_y), (hud_x + HUD_WIDTH - 30, cursor_y))
-    cursor_y += 6
- 
-    # Pulsing dot to indicate hardware connection status
-
-
-    pulse = math.sin(tick * 0.08)
-    dot_alpha = int(150 + pulse * 80)
-    dot_surf = pygame.Surface((12, 12), pygame.SRCALPHA)
-    pygame.draw.circle(dot_surf, (*ENTANGLE_COLOR, dot_alpha), (6, 6), 5)
-    screen.blit(dot_surf, (hud_x + 10, cursor_y + 2))
-    status = FONT_HUD_B.render("IBM Quantum: Aer Simulator", True, HUD_TEXT)
-    screen.blit(status, (hud_x + 26, cursor_y + 1))
- 
- 
-def _get_entangled_pairs(pieces: list[dict]) -> list[tuple]:
-    """
-    Extract unique entangled pairs from the piece list.
- 
-    Each piece stores a list of qubit_ids it's entangled with.
-    We return pairs (piece_a, piece_b) without duplicates.
- 
-    Args:
-        pieces: Full list of piece dicts.
- 
-    Returns:
-        List of (piece_a, piece_b) tuples.
-    """
-    qubit_map = {p["qubit_id"]: p for p in pieces if "qubit_id" in p}
-    seen = set()
-    pairs = []
-    for piece in pieces:
-        for partner_id in piece.get("entangled_with", []):
-            pair_key = tuple(sorted([piece["qubit_id"], partner_id]))
-            if pair_key not in seen and partner_id in qubit_map:
-                seen.add(pair_key)
-                pairs.append((piece, qubit_map[partner_id]))
-    return pairs
- 
- 
-# ---------------------------------------------------------------------------
-# Main render function — called every frame
-# ---------------------------------------------------------------------------
- 
-def render_frame(screen: pygame.Surface, game_state: dict, tick: int):
+def render_frame(screen: pygame.Surface, game_state: dict, tick: int): #uses ui_components.py 
     """
     Render one complete frame of the Quantum Chess game.
  
@@ -607,7 +362,7 @@ def render_frame(screen: pygame.Surface, game_state: dict, tick: int):
  
     # 4a. Highlight selected square
     if selected:
-        col, row = algebraic_to_grid(selected)
+        col, row = to_grid(selected)
         highlight_square(screen, col, row, SELECTED_COLOR, alpha=80)
  
     # 4b. Highlight valid move targets
@@ -615,7 +370,7 @@ def render_frame(screen: pygame.Surface, game_state: dict, tick: int):
  
     # 4c. Highlight king in check
     if check_king:
-        col, row = algebraic_to_grid(check_king)
+        col, row = to_grid(check_king)
         highlight_square(screen, col, row, CHECK_COLOR, alpha=100, border_only=True)
  
     # 5. Entanglement lines (drawn before pieces so lines go under them)
@@ -634,16 +389,16 @@ def render_frame(screen: pygame.Surface, game_state: dict, tick: int):
         if is_superposed and len(positions) == 2:
             # Draw ghost on BOTH squares — the piece might be at either
             for pos in positions:
-                col, row = algebraic_to_grid(pos)
+                col, row = to_grid(pos)
                 draw_ghost_piece(screen, piece, col, row)
         elif positions:
             # Draw solid piece on its single classical position
-            col, row = algebraic_to_grid(positions[0])
+            col, row = to_grid(positions[0])
             draw_piece(screen, piece, col, row)
  
     # 8. HUD panel
     draw_hud(screen, pieces, tick)
- 
+
  
 # ---------------------------------------------------------------------------
 # Demo — run this file directly to see the renderer in action
@@ -749,4 +504,3 @@ if __name__ == "__main__":
     # Clean up Pygame resources before exiting
     pygame.quit()
     sys.exit()  
-# Board drawing, piece rendering, superposition visuals

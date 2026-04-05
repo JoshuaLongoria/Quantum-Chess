@@ -41,6 +41,8 @@ Shared data contract:
 ---------------------------------------------------------------------------
 """
 
+#4/4 changed _to_grid() to to_grid() and _to_alg() to to_alg() for consistency with renderer.py
+
 from __future__ import annotations
 from typing import Optional
 
@@ -56,14 +58,14 @@ _ROOK_DIRS   = [(-1, 0), (1, 0), (0, -1), (0, 1)]
 _QUEEN_DIRS  = _BISHOP_DIRS + _ROOK_DIRS
 
 
-def _to_grid(pos: str) -> tuple[int, int]:
+def to_grid(pos: str) -> tuple[int, int]:
     """Algebraic (e.g. 'e4') → (col, row) with row 0 = rank 8."""
     col = ord(pos[0]) - ord('a')
     row = 8 - int(pos[1])
     return col, row
 
 
-def _to_alg(col: int, row: int) -> str:
+def to_alg(col: int, row: int) -> str:
     """(col, row) → algebraic.  row 0 = rank 8."""
     return FILES[col] + str(8 - row)
 
@@ -121,18 +123,18 @@ class Board:
 
         # White pieces — rank 1 (row 7) and rank 2 (row 6)
         for i, ptype in enumerate(back_rank):
-            sq = _to_alg(i, 7)                       # a1 … h1
+            sq = to_alg(i, 7)                       # a1 … h1
             self.pieces.append(self._make_piece(ptype, "white", sq))
         for i in range(8):
-            sq = _to_alg(i, 6)                       # a2 … h2
+            sq = to_alg(i, 6)                       # a2 … h2
             self.pieces.append(self._make_piece("pawn", "white", sq))
 
         # Black pieces — rank 8 (row 0) and rank 7 (row 1)
         for i, ptype in enumerate(back_rank):
-            sq = _to_alg(i, 0)                       # a8 … h8
+            sq = to_alg(i, 0)                       # a8 … h8
             self.pieces.append(self._make_piece(ptype, "black", sq))
         for i in range(8):
-            sq = _to_alg(i, 1)                       # a7 … h7
+            sq = to_alg(i, 1)                       # a7 … h7
             self.pieces.append(self._make_piece("pawn", "black", sq))
 
         self._rebuild_map()
@@ -210,7 +212,7 @@ class Board:
         piece["superposed"] = False
 
         # Auto-queen promotion
-        _, row = _to_grid(target)
+        _, row = to_grid(target)
         if piece["type"] == "pawn":
             if (piece["color"] == "white" and row == 0) or \
                (piece["color"] == "black" and row == 7):
@@ -322,13 +324,13 @@ class Board:
         """Generate pseudo-legal pawn moves (advance + capture)."""
         moves: list[str] = []
         color = piece["color"]
-        col, row = _to_grid(origin)
+        col, row = to_grid(origin)
         direction = -1 if color == "white" else 1      # white moves up (row--)
 
         # Single push
         r1 = row + direction
         if _on_board(col, r1):
-            sq1 = _to_alg(col, r1)
+            sq1 = to_alg(col, r1)
             if self.piece_at(sq1) is None:
                 moves.append(sq1)
 
@@ -336,7 +338,7 @@ class Board:
                 start_row = 6 if color == "white" else 1
                 if row == start_row:
                     r2 = row + 2 * direction
-                    sq2 = _to_alg(col, r2)
+                    sq2 = to_alg(col, r2)
                     if self.piece_at(sq2) is None:
                         moves.append(sq2)
 
@@ -345,7 +347,7 @@ class Board:
             nc = col + dc
             nr = row + direction
             if _on_board(nc, nr):
-                sq = _to_alg(nc, nr)
+                sq = to_alg(nc, nr)
                 occupant = self.piece_at(sq)
                 if occupant is not None and occupant["color"] != color:
                     moves.append(sq)
@@ -355,13 +357,13 @@ class Board:
     def _knight_moves(self, piece: dict, origin: str) -> list[str]:
         """Generate pseudo-legal knight jumps."""
         moves: list[str] = []
-        col, row = _to_grid(origin)
+        col, row = to_grid(origin)
         offsets = [(-2, -1), (-2, 1), (-1, -2), (-1, 2),
                    (1, -2), (1, 2), (2, -1), (2, 1)]
         for dc, dr in offsets:
             nc, nr = col + dc, row + dr
             if _on_board(nc, nr):
-                sq = _to_alg(nc, nr)
+                sq = to_alg(nc, nr)
                 occupant = self.piece_at(sq)
                 if occupant is None or occupant["color"] != piece["color"]:
                     moves.append(sq)
@@ -371,11 +373,11 @@ class Board:
                        directions: list[tuple[int, int]]) -> list[str]:
         """Generate pseudo-legal moves for sliding pieces (bishop/rook/queen)."""
         moves: list[str] = []
-        col, row = _to_grid(origin)
+        col, row = to_grid(origin)
         for dc, dr in directions:
             nc, nr = col + dc, row + dr
             while _on_board(nc, nr):
-                sq = _to_alg(nc, nr)
+                sq = to_alg(nc, nr)
                 occupant = self.piece_at(sq)
                 if occupant is None:
                     moves.append(sq)
@@ -391,14 +393,14 @@ class Board:
     def _king_moves(self, piece: dict, origin: str) -> list[str]:
         """Generate pseudo-legal king moves (one step in any direction)."""
         moves: list[str] = []
-        col, row = _to_grid(origin)
+        col, row = to_grid(origin)
         for dc in (-1, 0, 1):
             for dr in (-1, 0, 1):
                 if dc == 0 and dr == 0:
                     continue
                 nc, nr = col + dc, row + dr
                 if _on_board(nc, nr):
-                    sq = _to_alg(nc, nr)
+                    sq = to_alg(nc, nr)
                     occupant = self.piece_at(sq)
                     if occupant is None or occupant["color"] != piece["color"]:
                         moves.append(sq)
@@ -422,12 +424,12 @@ class Board:
     def _pawn_attacks(self, piece: dict, origin: str) -> list[str]:
         """Squares a pawn threatens (diagonals only, regardless of occupancy)."""
         attacks: list[str] = []
-        col, row = _to_grid(origin)
+        col, row = to_grid(origin)
         direction = -1 if piece["color"] == "white" else 1
         for dc in (-1, 1):
             nc, nr = col + dc, row + direction
             if _on_board(nc, nr):
-                attacks.append(_to_alg(nc, nr))
+                attacks.append(to_alg(nc, nr))
         return attacks
 
     # ------------------------------------------------------------------
