@@ -97,9 +97,12 @@ def draw_hud(screen: pygame.Surface, pieces: list[dict], tick: int):
     hud_section("LAST EVENT")
 
 
-    # In your final game, pass real event messages from game_manager.
+    # In The final game, pass real event messages from game_manager.
     # For now, these are example placeholder messages.
-
+# ---------------------------------------------------------------------------
+#  ***This demo section below is just to show how the HUD will look with some example data.***
+# ---------------------------------------------------------------------------
+ 
 
     demo_events = [
         "Knight split → e4 ↔ g5",
