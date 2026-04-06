@@ -6,7 +6,9 @@ import math
 from constants import *
 
 
-def draw_hud(screen: pygame.Surface, pieces: list[dict], tick: int):
+# This is where you will implement the draw_hud() function that renders the
+# Quantum State HUD panel on the right side of the screen. This panel is crucial
+def draw_hud(screen: pygame.Surface, pieces: list[dict], tick: int, event_log = None):
     """
     Draw the Quantum State HUD panel on the right side of the screen.
  
@@ -37,12 +39,12 @@ def draw_hud(screen: pygame.Surface, pieces: list[dict], tick: int):
     screen.blit(panel_surf, (hud_x, hud_y))
  
     # Panel border
-    pygame.draw.rect(screen, HUD_BORDER, hud_rect, width=1, border_radius=6)
+    pygame.draw.rect(screen, HUD_BORDER, hud_rect, width=2, border_radius=6)
  
     # --- Title bar -------------------------------------------------------
     title_bar = pygame.Rect(hud_x, hud_y, HUD_WIDTH - 20, 34)
     pygame.draw.rect(screen, (30, 40, 80), title_bar, border_radius=6)
-    title = FONT_HUD_T.render("⟨ψ| QUANTUM STATE |ψ⟩", True, HUD_TITLE)
+    title = FONT_HUD_T.render("ψ| QUANTUM STATE |ψ", True, HUD_TITLE)
     screen.blit(title, (hud_x + 10, hud_y + 8))
  
     cursor_y = hud_y + 46   # tracks vertical position as we add HUD elements
@@ -97,19 +99,10 @@ def draw_hud(screen: pygame.Surface, pieces: list[dict], tick: int):
     hud_section("LAST EVENT")
 
 
-    # In The final game, pass real event messages from game_manager.
-    # For now, these are example placeholder messages.
-# ---------------------------------------------------------------------------
-#  ***This demo section below is just to show how the HUD will look with some example data.***
-# ---------------------------------------------------------------------------
- 
-
-    demo_events = [
-        "Knight split → e4 ↔ g5",
-        "Rook entangled with Bishop",
-        "Pawn collapsed → d5",
-    ]
-    for ev in demo_events[-2:]:   # show last 2 events
+#4/6 demo status is gone replace with real event log from game_manager
+# show last 2 events 
+    events = event_log[-2:] if event_log else []
+    for ev in events:   
         hud_line(f"  {ev}", HUD_ACCENT)
  
     # --- Footer: IBM Quantum status indicator --------------------------
