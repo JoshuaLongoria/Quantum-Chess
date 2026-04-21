@@ -43,6 +43,14 @@ class QuantumEngine:
     def apply_hadamard(self, qubit_id: int):
         """Apply H gate: put qubit into equal superposition."""
         self._superposed.add(qubit_id)
+        
+    def apply_entanglement(self, qubit_a: int, qubit_b: int):
+        """Called by game_rules when a split move happens."""
+        self._superposed.add(qubit_a)
+        self._superposed.add(qubit_b)
+        
+        # Register the link in the manager
+        self.entanglement.entangle(qubit_a, qubit_b)
 
     # ------------------------------------------------------------------
     # Measurement
