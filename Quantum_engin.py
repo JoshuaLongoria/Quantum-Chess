@@ -13,9 +13,10 @@ Qubit states:
     classical  — piece is at one definite square (default)
     superposed — H gate applied: 50/50 collapse on measurement
 """
-
-from __future__ import annotations
-import random
+from qiskit_ibm_runtime import QiskitRuntimeService, SamplerV2 as Sampler
+from qiskit.transpiler.preset_passmanagers import generate_preset_pass_manager
+from qiskit import QuantumCircuit
+from entanglement import EntanglementManager 
 
 
 class QuantumEngine:
@@ -42,6 +43,14 @@ class QuantumEngine:
     def apply_hadamard(self, qubit_id: int):
         """Apply H gate: put qubit into equal superposition."""
         self._superposed.add(qubit_id)
+        
+    def apply_entanglement(self, qubit_a: int, qubit_b: int):
+        """Called by game_rules when a split move happens."""
+        self._superposed.add(qubit_a)
+        self._superposed.add(qubit_b)
+        
+        # Register the link in the manager
+        self.entanglement.entangle(qubit_a, qubit_b)
 
     # ------------------------------------------------------------------
     # Measurement
