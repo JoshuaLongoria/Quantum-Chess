@@ -67,6 +67,28 @@ def draw_hud(screen: pygame.Surface, pieces: list[dict], tick: int, event_log = 
         rendered = FONT_HUD_B.render(text, True, color)
         screen.blit(rendered, (hud_x + indent, cursor_y))
         cursor_y += 18
+
+    def hud_wrapped(text: str, color=None, indent: int = 10):
+        """Helper: draw HUD text wrapped to fit inside the panel."""
+        nonlocal cursor_y
+        color = color or HUD_TEXT
+        max_width = HUD_WIDTH - 20 - indent - 8
+        words = text.split()
+        line = ""
+        for word in words:
+            test = (line + " " + word).strip()
+            if FONT_HUD_B.size(test)[0] <= max_width:
+                line = test
+            else:
+                if line:
+                    rendered = FONT_HUD_B.render(line, True, color)
+                    screen.blit(rendered, (hud_x + indent, cursor_y))
+                    cursor_y += 16
+                line = word
+        if line:
+            rendered = FONT_HUD_B.render(line, True, color)
+            screen.blit(rendered, (hud_x + indent, cursor_y))
+            cursor_y += 16
  
     # --- Section: Superposition -----------------------------------------
     hud_section("SUPERPOSITION")
@@ -102,8 +124,8 @@ def draw_hud(screen: pygame.Surface, pieces: list[dict], tick: int, event_log = 
 #4/6 demo status is gone replace with real event log from game_manager
 # show last 2 events 
     events = event_log[-2:] if event_log else []
-    for ev in events:   
-        hud_line(f"  {ev}", HUD_ACCENT)
+    for ev in events:
+        hud_wrapped(f"  {ev}", HUD_ACCENT)
  
     # --- Footer: IBM Quantum status indicator --------------------------
 

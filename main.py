@@ -17,16 +17,24 @@ while True:
         if event.type == pygame.QUIT:
             pygame.quit()
             sys.exit()
-        elif event.type == pygame.MOUSEBUTTONDOWN:
-            x, y =pygame.mouse.get_pos()
-            gm.handle_click(x, y)
-            # YOUR JOB: get mouse position and call gm.handle_click()
-            pass
 
-    # YOUR JOB: get game state and call render_frame()
+        elif event.type == pygame.MOUSEBUTTONDOWN:
+            x, y = pygame.mouse.get_pos()
+            gm.handle_click(x, y)
+
+        elif event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_q:
+                gm.set_quantum_mode("superposition")
+            elif event.key == pygame.K_m:
+                gm.set_quantum_mode("measure")
+            elif event.key == pygame.K_e:
+                gm.set_quantum_mode("entangle")
+            elif event.key == pygame.K_ESCAPE:
+                gm._cancel_quantum_mode()
+
     game_state = gm.get_game_state()
     render_frame(screen, game_state, tick)
-    
+
     pygame.display.flip()
     clock.tick(60)
     tick += 1

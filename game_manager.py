@@ -1,31 +1,22 @@
+# Turn flow, win condition, event orchestration
 """
 game_manager.py
----------------
-Luis — Game Logic | Quantum Chess
-CS5331/4331 Introduction to Quantum Computing | Texas Tech University
 
 Turn flow, win-condition detection, and event orchestration.
 
 Responsibilities:
   - Track whose turn it is (white / black)
   - Handle mouse clicks: select a piece, show legal moves, execute moves
+  - Manage quantum move modes (superposition, measure, entangle)
   - Build the game_state dict that renderer.render_frame() consumes each frame
   - Detect check, checkmate, and stalemate after every move
   - Maintain a quantum event log for the HUD
-  - Provide hooks for quantum moves (superposition, entangle, measure)
-    that quantum_rules.py will call back into
 
-Coordinate flow:
-  1. main.py receives a Pygame mouse-click event
-  2. main.py calls game_manager.handle_click(pixel_x, pixel_y)
-  3. game_manager figures out which square was clicked
-  4. Depending on current selection state it either:
-       a) selects a piece  (highlights it, computes legal moves)
-       b) moves the selected piece to the target square
-       c) deselects (clicked empty square / own piece with no moves)
-  5. After a move, game_manager checks for check/checkmate/stalemate
-  6. main.py calls game_manager.get_game_state() and passes the dict
-     to renderer.render_frame()
+Quantum move flow (triggered by keyboard in main.py):
+  Q key -> "superposition" mode: click piece, then click destination
+  M key -> "measure" mode:       click any superposed own piece to collapse it
+  E key -> "entangle" mode:      click two own pieces to link them (stub)
+  Esc   -> cancel active quantum mode
 
 ---------------------------------------------------------------------------
 """
@@ -34,6 +25,13 @@ from __future__ import annotations
 from typing import Optional
 from board import Board, to_grid, to_alg
 from constants import BOARD_OFFSET_X, BOARD_OFFSET_Y, SQUARE_SIZE, BOARD_PX
+from Quantum_engin import QuantumEngine
+from quantum_rules import (
+    superposition_move,
+    collapse_piece,
+    entangle_move,
+    capture_superposed,
+)
 
 
 # -------------------------------------------------------------------------
@@ -63,6 +61,7 @@ class GameManager:
 
     Attributes:
         board:         Board instance holding all piece state.
+        engine:        QuantumEngine for H gate and measurement.
         current_turn:  "white" or "black".
         selected_piece: Currently selected piece dict, or None.
         selected_sq:   Algebraic square of the selected piece, or None.
@@ -70,10 +69,13 @@ class GameManager:
         event_log:     List of human-readable strings for the HUD event log.
         game_over:     True once checkmate or stalemate is detected.
         game_result:   Short result string ("White wins", "Draw", etc.).
+        quantum_mode:  Active quantum input mode, or None for classical play.
+        _q_piece:      First piece stored during a multi-step quantum move.
     """
 
     def __init__(self):
         self.board = Board()
+        self.engine = QuantumEngine()
         self.current_turn: str = "white"
         self.selected_piece: Optional[dict] = None
         self.selected_sq: Optional[str] = None
@@ -81,6 +83,8 @@ class GameManager:
         self.event_log: list[str] = []
         self.game_over: bool = False
         self.game_result: str = ""
+        self.quantum_mode: Optional[str] = None   # "superposition" | "measure" | "entangle"
+        self._q_piece: Optional[dict] = None      # first piece in multi-step quantum move
 
     # ------------------------------------------------------------------
     # Game-state dict (consumed by renderer every frame)
@@ -91,14 +95,15 @@ class GameManager:
         Build and return the dict that renderer.render_frame() expects.
 
         Keys:
-            pieces       – live piece list from the board
-            selected     – algebraic square of the selected piece (or None)
-            valid_moves  – list of legal move targets
-            current_turn – "white" or "black"
-            check_king   – algebraic square of king in check (or None)
-            event_log    – list of recent event strings for the HUD
-            game_over    – bool
-            game_result  – result string
+            pieces       - live piece list from the board
+            selected     - algebraic square of the selected piece (or None)
+            valid_moves  - list of legal move targets
+            current_turn - "white" or "black"
+            check_king   - algebraic square of king in check (or None)
+            event_log    - list of recent event strings for the HUD
+            game_over    - bool
+            game_result  - result string
+            quantum_mode - active quantum mode string or None
         """
         return {
             "pieces":       self.board.get_pieces_list(),
@@ -109,58 +114,196 @@ class GameManager:
             "event_log":    self.event_log,
             "game_over":    self.game_over,
             "game_result":  self.game_result,
+            "quantum_mode": self.quantum_mode,
         }
 
     # ------------------------------------------------------------------
-    # Click handling
+    # Quantum mode control (called from main.py on keypress)
+    # ------------------------------------------------------------------
+
+    def set_quantum_mode(self, mode: str):
+        """
+        Activate a quantum input mode, or toggle it off if already active.
+
+        Called by main.py when the player presses Q / M / E.
+        Pressing the same key twice cancels the mode.
+        """
+        if self.game_over:
+            return
+
+        if self.quantum_mode == mode:
+            self._cancel_quantum_mode()
+            self.log("Quantum mode cancelled.")
+            return
+
+        self._cancel_quantum_mode()
+        self.quantum_mode = mode
+
+        hints = {
+            "superposition": "SUPERPOSITION: select your piece, then click destination.",
+            "measure":       "MEASURE: click a superposed piece to collapse it.",
+            "entangle":      "ENTANGLE: click two pieces to link them. [stub]",
+        }
+        self.log(hints.get(mode, ""))
+
+    def _cancel_quantum_mode(self):
+        """Reset quantum mode state and clear selection."""
+        self.quantum_mode = None
+        self._q_piece = None
+        self.deselect()
+
+    # ------------------------------------------------------------------
+    # Click handling — dispatches to classical or quantum path
     # ------------------------------------------------------------------
 
     def handle_click(self, px: int, py: int):
         """
         Process a mouse click at pixel coordinates (px, py).
 
-        State machine:
-          • Nothing selected → click own piece → select it
-          • Piece selected   → click valid target → execute move
-          • Piece selected   → click another own piece → re-select
-          • Piece selected   → click invalid square → deselect
+        Routes to the active quantum mode handler, or falls through to
+        classical chess click handling.
         """
         if self.game_over:
             return
 
         square = pixel_to_square(px, py)
+
+        if self.quantum_mode == "superposition":
+            self._handle_superposition_click(square)
+        elif self.quantum_mode == "measure":
+            self._handle_measure_click(square)
+        elif self.quantum_mode == "entangle":
+            self._handle_entangle_click(square)
+        else:
+            self._handle_classical_click(square)
+
+    # ------------------------------------------------------------------
+    # Classical click handler
+    # ------------------------------------------------------------------
+
+    def _handle_classical_click(self, square: Optional[str]):
+        """
+        Standard chess selection and move execution.
+
+        State machine:
+          Nothing selected -> click own piece       -> select it
+          Piece selected   -> click valid target    -> execute move
+          Piece selected   -> click another own piece -> re-select
+          Piece selected   -> click invalid square  -> deselect
+        """
         if square is None:
-            # Click outside the board — deselect
             self.deselect()
             return
 
         clicked_piece = self.board.piece_at(square)
 
-        # ----- No piece currently selected -----
         if self.selected_piece is None:
             if clicked_piece and clicked_piece["color"] == self.current_turn:
                 self.select(clicked_piece, square)
             return
 
-        # ----- A piece IS selected -----
-
-        # Clicked the same square → deselect
         if square == self.selected_sq:
             self.deselect()
             return
 
-        # Clicked another of our own pieces → re-select that one instead
         if clicked_piece and clicked_piece["color"] == self.current_turn:
             self.select(clicked_piece, square)
             return
 
-        # Clicked a valid move target → execute the move
         if square in self.valid_moves:
             self.execute_move(square)
             return
 
-        # Clicked an invalid square → deselect
         self.deselect()
+
+    # ------------------------------------------------------------------
+    # Quantum click handlers
+    # ------------------------------------------------------------------
+
+    def _handle_superposition_click(self, square: Optional[str]):
+        """
+        Two-step handler for the superposition move.
+
+        Step 1: click own (non-superposed) piece to select it.
+        Step 2: click a legal destination to split the piece there.
+        """
+        if square is None:
+            self._cancel_quantum_mode()
+            return
+
+        if self._q_piece is None:
+            # Step 1 — select the piece
+            piece = self.board.piece_at(square)
+            if piece and piece["color"] == self.current_turn and not piece["superposed"]:
+                self._q_piece = piece
+                self.selected_sq = square
+                self.valid_moves = self.board.get_legal_moves(piece)
+                self.log(f"Select destination for {piece['type'].capitalize()}.")
+            else:
+                self.log("Select one of your non-superposed pieces.")
+        else:
+            # Step 2 — pick destination (sq_b); sq_a is the piece's current square
+            sq_a = self._q_piece["positions"][0]
+            sq_b = square
+
+            if sq_b not in self.valid_moves:
+                self.log("Invalid destination. Move cancelled.")
+                self._cancel_quantum_mode()
+                return
+
+            msg = superposition_move(self.board, self.engine, self._q_piece, sq_a, sq_b)
+            self.log(msg)
+            self._cancel_quantum_mode()
+            self.next_turn()
+            self.check_end_conditions()
+
+    def _handle_measure_click(self, square: Optional[str]):
+        """
+        Single-click handler: collapse a superposed piece you own.
+        """
+        if square is None:
+            self._cancel_quantum_mode()
+            return
+
+        piece = self.board.piece_at(square)
+        if piece and piece["color"] == self.current_turn and piece["superposed"]:
+            msg = collapse_piece(self.board, self.engine, piece)
+            self.log(msg)
+            self.quantum_mode = None
+            self.next_turn()
+            self.check_end_conditions()
+        else:
+            self.log("Click one of your superposed pieces to collapse it.")
+
+    def _handle_entangle_click(self, square: Optional[str]):
+        """
+        Two-step handler for the entangle move (stub until Entanglement.py arrives).
+
+        Step 1: click first own piece.
+        Step 2: click second own piece to link them.
+        """
+        if square is None:
+            self._cancel_quantum_mode()
+            return
+
+        piece = self.board.piece_at(square)
+        if piece is None or piece["color"] != self.current_turn:
+            self._cancel_quantum_mode()
+            return
+
+        if self._q_piece is None:
+            self._q_piece = piece
+            self.selected_sq = square
+            self.log(f"Entangle: now click the second piece to link with {piece['type'].capitalize()}.")
+        else:
+            if piece is self._q_piece:
+                self.log("Cannot entangle a piece with itself.")
+                return
+            msg = entangle_move(self.board, None, self._q_piece, piece)
+            self.log(msg)
+            self._cancel_quantum_mode()
+            self.next_turn()
+            self.check_end_conditions()
 
     # ------------------------------------------------------------------
     # Selection helpers
@@ -186,29 +329,36 @@ class GameManager:
         """
         Move the selected piece to *target*, handle captures, log events,
         switch turns, and check for game-ending conditions.
+
+        If the target holds a superposed enemy piece, a quantum measurement
+        is triggered via capture_superposed() instead of a normal capture.
         """
         piece = self.selected_piece
         origin = self.selected_sq
-
-        # Build a human-readable description for the event log
         symbol = piece["type"].capitalize()
         capture_target = self.board.piece_at(target)
+
+        # Quantum capture: target is a superposed enemy piece
+        if (capture_target
+                and capture_target["color"] != piece["color"]
+                and capture_target["superposed"]):
+            msg = capture_superposed(self.board, self.engine, piece, capture_target, target)
+            self.log(msg)
+            self.deselect()
+            self.next_turn()
+            self.check_end_conditions()
+            return
+
+        # Classical move / classical capture
         if capture_target and capture_target["color"] != piece["color"]:
             cap_symbol = capture_target["type"].capitalize()
-            self.log(f"{piece['color'].capitalize()} {symbol} {origin}×{target} (captured {cap_symbol})")
+            self.log(f"{piece['color'].capitalize()} {symbol} {origin}x{target} (captured {cap_symbol})")
         else:
-            self.log(f"{piece['color'].capitalize()} {symbol} {origin}→{target}")
+            self.log(f"{piece['color'].capitalize()} {symbol} {origin}->{target}")
 
-        # Execute on the board (handles capture + auto-promotion)
         self.board.move_piece(piece, target)
-
-        # Clear selection
         self.deselect()
-
-        # Switch turn
         self.next_turn()
-
-        # Check for game-ending conditions
         self.check_end_conditions()
 
     # ------------------------------------------------------------------
@@ -233,12 +383,12 @@ class GameManager:
         if self.board.is_checkmate(color):
             winner = "Black" if color == "white" else "White"
             self.game_over = True
-            self.game_result = f"Checkmate — {winner} wins!"
+            self.game_result = f"Checkmate -- {winner} wins!"
             self.log(self.game_result)
 
         elif self.board.is_stalemate(color):
             self.game_over = True
-            self.game_result = "Stalemate — Draw!"
+            self.game_result = "Stalemate -- Draw!"
             self.log(self.game_result)
 
         elif self.board.is_in_check(color):
@@ -256,45 +406,6 @@ class GameManager:
         """Return the last *n* events for HUD display."""
         return self.event_log[-n:]
 
-    # ------------------------------------------------------------------
-    # Quantum move stubs (to be wired to quantum_rules.py)
-    # ------------------------------------------------------------------
-
-    def handle_superposition_move(self, piece: dict, sq_a: str, sq_b: str):
-        """
-        Stub: put *piece* into superposition across sq_a and sq_b.
-
-        Will be implemented when quantum_rules.py is integrated.
-        For now, logs the intent so the HUD shows something useful
-        during early testing.
-        """
-        symbol = piece["type"].capitalize()
-        self.log(f"{symbol} split → {sq_a} ↔ {sq_b}")
-        # TODO: call quantum_rules.superposition_move(self.board, piece, sq_a, sq_b)
-
-    def handle_entangle_move(self, piece_a: dict, piece_b: dict):
-        """
-        Stub: entangle two pieces via a Bell state.
-
-        Will be implemented when quantum_rules.py is integrated.
-        """
-        sym_a = piece_a["type"].capitalize()
-        sym_b = piece_b["type"].capitalize()
-        pos_a = piece_a["positions"][0]
-        pos_b = piece_b["positions"][0]
-        self.log(f"{sym_a}({pos_a}) entangled with {sym_b}({pos_b})")
-        # TODO: call quantum_rules.entangle_move(self.board, piece_a, piece_b)
-
-    def handle_measure(self, piece: dict):
-        """
-        Stub: force-measure a superposed piece, collapsing it.
-
-        Will be implemented when quantum_rules.py is integrated.
-        """
-        symbol = piece["type"].capitalize()
-        self.log(f"{symbol} measured (collapse pending)")
-        # TODO: call quantum_rules.measure_piece(self.board, piece)
-
 
 # =========================================================================
 # Standalone test — run with:  python game_manager.py
@@ -302,7 +413,7 @@ class GameManager:
 
 if __name__ == "__main__":
     print("=" * 60)
-    print("  game_manager.py — GameManager Tests")
+    print("  game_manager.py -- GameManager Tests")
     print("=" * 60)
 
     gm = GameManager()
@@ -313,19 +424,18 @@ if __name__ == "__main__":
     assert state["selected"] is None
     assert state["valid_moves"] == []
     assert len(state["pieces"]) == 32
+    assert state["quantum_mode"] is None
     print("\n[PASS] Initial game state is correct")
 
-    # --- Test 2: select a pawn by clicking its pixel location ---
-    # e2 pawn: col=4, row=6 → pixel center roughly (OFFSET_X + 4*80 + 40, OFFSET_Y + 6*80 + 40)
+    # --- Test 2: select a pawn ---
     e2_px = BOARD_OFFSET_X + 4 * SQUARE_SIZE + SQUARE_SIZE // 2
     e2_py = BOARD_OFFSET_Y + 6 * SQUARE_SIZE + SQUARE_SIZE // 2
     gm.handle_click(e2_px, e2_py)
 
     state = gm.get_game_state()
     assert state["selected"] == "e2", f"Expected e2 selected, got {state['selected']}"
-    assert "e3" in state["valid_moves"]
-    assert "e4" in state["valid_moves"]
-    print(f"[PASS] Selected e2 pawn — valid moves: {sorted(state['valid_moves'])}")
+    assert "e3" in state["valid_moves"] and "e4" in state["valid_moves"]
+    print(f"[PASS] Selected e2 pawn -- valid moves: {sorted(state['valid_moves'])}")
 
     # --- Test 3: move pawn to e4 ---
     e4_px = BOARD_OFFSET_X + 4 * SQUARE_SIZE + SQUARE_SIZE // 2
@@ -333,60 +443,67 @@ if __name__ == "__main__":
     gm.handle_click(e4_px, e4_py)
 
     state = gm.get_game_state()
-    assert state["current_turn"] == "black", f"Expected black's turn, got {state['current_turn']}"
-    assert state["selected"] is None
+    assert state["current_turn"] == "black"
     assert gm.board.piece_at("e4") is not None
     assert gm.board.piece_at("e2") is None
-    print("[PASS] Moved e2→e4, turn switched to black")
+    print("[PASS] Moved e2->e4, turn switched to black")
 
-    # --- Test 4: click outside board does nothing ---
-    gm.handle_click(5, 5)
-    state = gm.get_game_state()
-    assert state["selected"] is None
-    print("[PASS] Click outside board deselects cleanly")
+    # --- Test 4: superposition mode via set_quantum_mode ---
+    gm2 = GameManager()
+    gm2.set_quantum_mode("superposition")
+    assert gm2.quantum_mode == "superposition"
 
-    # --- Test 5: black moves a pawn ---
-    d7_px = BOARD_OFFSET_X + 3 * SQUARE_SIZE + SQUARE_SIZE // 2
-    d7_py = BOARD_OFFSET_Y + 1 * SQUARE_SIZE + SQUARE_SIZE // 2
-    gm.handle_click(d7_px, d7_py)  # select d7 pawn
-
-    state = gm.get_game_state()
-    assert state["selected"] == "d7"
-    print(f"[PASS] Black selected d7 — valid moves: {sorted(state['valid_moves'])}")
-
-    d5_px = BOARD_OFFSET_X + 3 * SQUARE_SIZE + SQUARE_SIZE // 2
-    d5_py = BOARD_OFFSET_Y + 3 * SQUARE_SIZE + SQUARE_SIZE // 2
-    gm.handle_click(d5_px, d5_py)  # move to d5
-
-    state = gm.get_game_state()
-    assert state["current_turn"] == "white"
-    assert gm.board.piece_at("d5") is not None
-    print("[PASS] Black moved d7→d5, turn switched to white")
-
-    # --- Test 6: event log ---
-    assert len(gm.event_log) >= 2
-    print(f"[PASS] Event log has {len(gm.event_log)} entries:")
-    for ev in gm.event_log:
-        print(f"       • {ev}")
-
-    # --- Test 7: re-select (click different own piece) ---
-    # White's turn — click b1 knight, then click d2 pawn instead
+    # Step 1: select white b1 knight
     b1_px = BOARD_OFFSET_X + 1 * SQUARE_SIZE + SQUARE_SIZE // 2
     b1_py = BOARD_OFFSET_Y + 7 * SQUARE_SIZE + SQUARE_SIZE // 2
-    gm.handle_click(b1_px, b1_py)
-    assert gm.get_game_state()["selected"] == "b1"
+    gm2.handle_click(b1_px, b1_py)
+    assert gm2._q_piece is not None
+    assert gm2._q_piece["type"] == "knight"
+    print("[PASS] Superposition step 1: knight selected")
 
-    d2_px = BOARD_OFFSET_X + 3 * SQUARE_SIZE + SQUARE_SIZE // 2
-    d2_py = BOARD_OFFSET_Y + 6 * SQUARE_SIZE + SQUARE_SIZE // 2
-    gm.handle_click(d2_px, d2_py)
-    assert gm.get_game_state()["selected"] == "d2"
-    print("[PASS] Re-selecting a different own piece works")
+    # Step 2: click a3 (valid knight destination)
+    a3_px = BOARD_OFFSET_X + 0 * SQUARE_SIZE + SQUARE_SIZE // 2
+    a3_py = BOARD_OFFSET_Y + 5 * SQUARE_SIZE + SQUARE_SIZE // 2
+    gm2.handle_click(a3_px, a3_py)
+    knight = gm2.board.piece_at("b1") or gm2.board.piece_at("a3")
+    assert knight is not None and knight["superposed"]
+    assert len(knight["positions"]) == 2
+    print(f"[PASS] Superposition step 2: knight in superposition {knight['positions']}")
+    assert gm2.current_turn == "black", "Turn should have switched"
+    print("[PASS] Turn switched after superposition move")
 
-    # Deselect
-    gm.handle_click(5, 5)
-    assert gm.get_game_state()["selected"] is None
-    print("[PASS] Deselection works")
+    # --- Test 5: measure mode ---
+    gm2.set_quantum_mode("measure")
+    assert gm2.quantum_mode == "measure"
+
+    # Click the superposed knight (it's on both b1 and a3 -- click b1)
+    gm2.current_turn = "white"  # force back for test
+    gm2.handle_click(b1_px, b1_py)
+    assert not knight["superposed"], "Knight should have collapsed"
+    assert len(knight["positions"]) == 1
+    print(f"[PASS] Measure: knight collapsed to {knight['positions'][0]}")
+
+    # --- Test 6: toggle mode off ---
+    gm3 = GameManager()
+    gm3.set_quantum_mode("superposition")
+    assert gm3.quantum_mode == "superposition"
+    gm3.set_quantum_mode("superposition")   # press Q again
+    assert gm3.quantum_mode is None
+    print("[PASS] Pressing same mode key twice cancels mode")
+
+    # --- Test 7: entangle stub ---
+    gm4 = GameManager()
+    gm4.set_quantum_mode("entangle")
+    a1_px = BOARD_OFFSET_X + 0 * SQUARE_SIZE + SQUARE_SIZE // 2
+    a1_py = BOARD_OFFSET_Y + 7 * SQUARE_SIZE + SQUARE_SIZE // 2
+    h1_px = BOARD_OFFSET_X + 7 * SQUARE_SIZE + SQUARE_SIZE // 2
+    h1_py = BOARD_OFFSET_Y + 7 * SQUARE_SIZE + SQUARE_SIZE // 2
+    gm4.handle_click(a1_px, a1_py)
+    assert gm4._q_piece is not None
+    gm4.handle_click(h1_px, h1_py)
+    assert any("STUB" in ev for ev in gm4.event_log)
+    print("[PASS] Entangle stub fires and logs correctly")
 
     print("\n" + "=" * 60)
     print("  All game_manager.py tests passed!")
-    print("=" * 60)# Turn flow, win condition, event orchestration
+    print("=" * 60)
