@@ -25,7 +25,8 @@ from __future__ import annotations
 from typing import Optional
 from board import Board, to_grid, to_alg
 from constants import BOARD_OFFSET_X, BOARD_OFFSET_Y, SQUARE_SIZE, BOARD_PX
-from Quantum_engin import QuantumEngine
+# Use unified QuantumBackend from Entanglement.py (replaces Quantum_engin.py)
+from Entanglement import QuantumBackend
 from quantum_rules import (
     superposition_move,
     collapse_piece,
@@ -61,7 +62,7 @@ class GameManager:
 
     Attributes:
         board:         Board instance holding all piece state.
-        engine:        QuantumEngine for H gate and measurement.
+        engine:        QuantumBackend for H gate, measurement, and entanglement.
         current_turn:  "white" or "black".
         selected_piece: Currently selected piece dict, or None.
         selected_sq:   Algebraic square of the selected piece, or None.
@@ -73,9 +74,13 @@ class GameManager:
         _q_piece:      First piece stored during a multi-step quantum move.
     """
 
-    def __init__(self):
+    def __init__(self, quantum_mode: str = "simulated", ibm_backend: str = None):
         self.board = Board()
-        self.engine = QuantumEngine()
+        # quantum_mode: "simulated", "aer", or "ibm"
+        # ibm_backend: optional override from config.py
+        from Entanglement import IBM_BACKEND
+        backend = ibm_backend or IBM_BACKEND
+        self.engine = QuantumBackend(mode=quantum_mode, ibm_backend=backend)
         self.current_turn: str = "white"
         self.selected_piece: Optional[dict] = None
         self.selected_sq: Optional[str] = None
@@ -299,7 +304,7 @@ class GameManager:
             if piece is self._q_piece:
                 self.log("Cannot entangle a piece with itself.")
                 return
-            msg = entangle_move(self.board, None, self._q_piece, piece)
+            msg = entangle_move(self.board, self.engine, self._q_piece, piece)
             self.log(msg)
             self._cancel_quantum_mode()
             self.next_turn()

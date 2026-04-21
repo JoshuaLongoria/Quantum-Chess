@@ -1,15 +1,38 @@
 # Entry point, game loop
 import pygame
 import sys
+import argparse
 from constants import WINDOW_WIDTH, WINDOW_HEIGHT
 from renderer import render_frame
 from game_manager import GameManager
+from Entanglement import QuantumBackend
+
+# Parse command-line arguments
+parser = argparse.ArgumentParser(description="Quantum Chess")
+parser.add_argument(
+    "--mode", 
+    choices=["simulated", "aer", "ibm"],
+    default="simulated",
+    help="Quantum backend: simulated (default), aer (Qiskit Aer), ibm (IBM Quantum)"
+)
+parser.add_argument(
+    "--backend",
+    type=str,
+    default=None,
+    help="IBM Quantum backend name (default: ibm_brisbane, set in config.py)"
+)
+args = parser.parse_args()
 
 pygame.init()
 screen = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT))
 pygame.display.set_caption("Quantum Chess")
 clock = pygame.time.Clock()
-gm = GameManager()
+
+# Create game manager with specified quantum backend
+gm = GameManager(quantum_mode=args.mode, ibm_backend=args.backend)
+
+if args.mode == "ibm" and not gm.engine.is_ibm_connected():
+    print("Warning: IBM Quantum connection failed, using simulated mode")
 tick = 0
 
 while True:

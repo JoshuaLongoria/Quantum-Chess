@@ -22,14 +22,15 @@ return a short human-readable string for the game_manager event log.
 
 from __future__ import annotations
 from board import Board
-from Quantum_engin import QuantumEngine
+# Use unified QuantumBackend from Entanglement.py (replaces Quantum_engin.py)
+from Entanglement import QuantumBackend
 
 
 # ---------------------------------------------------------------------------
 # Superposition move
 # ---------------------------------------------------------------------------
 
-def superposition_move(board: Board, engine: QuantumEngine,
+def superposition_move(board: Board, engine: QuantumBackend,
                        piece: dict, sq_a: str, sq_b: str) -> str:
     """
     Split *piece* into superposition across sq_a and sq_b.
@@ -66,30 +67,47 @@ def superposition_move(board: Board, engine: QuantumEngine,
 # Entangle move (stub — waiting for Entanglement.py)
 # ---------------------------------------------------------------------------
 
-def entangle_move(board: Board, entanglement, piece_a: dict, piece_b: dict) -> str:
+def entangle_move(board: Board, engine: QuantumBackend,
+                   piece_a: dict, piece_b: dict) -> str:
     """
-    Link piece_a and piece_b into a Bell state via Entanglement.py.
+    Link piece_a and piece_b into a Bell state via QuantumBackend.
 
-    STUB: Entanglement.py (Lavneet Hora) is not yet available.
-    Wire this up once that module is delivered.
+    Creates quantum entanglement between two pieces — when either is
+    measured, both collapse to the same outcome (correlated measurement).
 
-    Expected interface once available:
-        entanglement.create_bell_state(piece_a, piece_b)
-        piece_a["entangled_with"].append(piece_b["qubit_id"])
-        piece_b["entangled_with"].append(piece_a["qubit_id"])
+    Rules:
+      - Both pieces must be classical (not superposed, not entangled)
+      - Both pieces must be on the board
+      - After entangling, both pieces share entangled_with list
+
+    Returns a log string.
     """
+    # Validate both pieces are classical
+    if piece_a["superposed"] or piece_b["superposed"]:
+        return "Cannot entangle: one or both pieces are in superposition."
+
+    if piece_a["entangled_with"] or piece_b["entangled_with"]:
+        return "Cannot entangle: one or both pieces are already entangled."
+
+    # Create the Bell state entanglement
+    engine.entangle(piece_a["qubit_id"], piece_b["qubit_id"])
+
+    # Update piece state
+    piece_a["entangled_with"].append(piece_b["qubit_id"])
+    piece_b["entangled_with"].append(piece_a["qubit_id"])
+
     sym_a = piece_a["type"].capitalize()
     sym_b = piece_b["type"].capitalize()
     pos_a = piece_a["positions"][0]
     pos_b = piece_b["positions"][0]
-    return f"[STUB] Entangle {sym_a}({pos_a}) <-> {sym_b}({pos_b}) -- pending Entanglement.py"
+    return f"Entangled {sym_a}({pos_a}) <-> {sym_b}({pos_b}) [Bell state]"
 
 
 # ---------------------------------------------------------------------------
 # Collapse / force-measure
 # ---------------------------------------------------------------------------
 
-def collapse_piece(board: Board, engine: QuantumEngine, piece: dict) -> str:
+def collapse_piece(board: Board, engine: QuantumBackend, piece: dict) -> str:
     """
     Force-measure a superposed piece, collapsing it to one square.
 
@@ -104,7 +122,7 @@ def collapse_piece(board: Board, engine: QuantumEngine, piece: dict) -> str:
         return f"{piece['type'].capitalize()} is not in superposition."
 
     sq_a, sq_b = piece["positions"][0], piece["positions"][1]
-    result = engine.measure(piece["qubit_id"])   # 0 → sq_a, 1 → sq_b
+    result = engine.measure_superposition(piece["qubit_id"])   # 0 → sq_a, 1 → sq_b
     collapsed_to = sq_a if result == 0 else sq_b
 
     piece["positions"] = [collapsed_to]
@@ -120,7 +138,7 @@ def collapse_piece(board: Board, engine: QuantumEngine, piece: dict) -> str:
 # Capture of a superposed piece
 # ---------------------------------------------------------------------------
 
-def capture_superposed(board: Board, engine: QuantumEngine,
+def capture_superposed(board: Board, engine: QuantumBackend,
                        attacker: dict, target_piece: dict,
                        capture_sq: str) -> str:
     """
@@ -139,7 +157,7 @@ def capture_superposed(board: Board, engine: QuantumEngine,
         return ""
 
     sq_a, sq_b = target_piece["positions"][0], target_piece["positions"][1]
-    result = engine.measure(target_piece["qubit_id"])
+    result = engine.measure_superposition(target_piece["qubit_id"])
     collapsed_to = sq_a if result == 0 else sq_b
 
     target_piece["positions"] = [collapsed_to]
@@ -171,7 +189,7 @@ if __name__ == "__main__":
 
     # --- Test 1: superposition_move ---
     b = Board()
-    e = QuantumEngine()
+    e = QuantumBackend()  # Use unified QuantumBackend
     knight = b.piece_at("b1")
 
     log = superposition_move(b, e, knight, "b1", "c3")
@@ -191,7 +209,7 @@ if __name__ == "__main__":
     collapse_results = set()
     for _ in range(40):
         b2 = Board()
-        e2 = QuantumEngine()
+        e2 = QuantumBackend()
         p2 = b2.piece_at("g1")   # white knight on g1
         superposition_move(b2, e2, p2, "g1", "f3")
         log3 = collapse_piece(b2, e2, p2)
@@ -204,7 +222,7 @@ if __name__ == "__main__":
 
     # --- Test 4: collapse on non-superposed piece is a no-op ---
     b4 = Board()
-    e4 = QuantumEngine()
+    e4 = QuantumBackend()
     pawn = b4.piece_at("e2")
     log4 = collapse_piece(b4, e4, pawn)
     assert "not in superposition" in log4
@@ -215,7 +233,7 @@ if __name__ == "__main__":
     fails    = 0
     for _ in range(60):
         b5 = Board()
-        e5 = QuantumEngine()
+        e5 = QuantumBackend()
         # Put white knight into superposition between b1 and c3
         wknight = b5.piece_at("b1")
         superposition_move(b5, e5, wknight, "b1", "c3")
@@ -232,13 +250,28 @@ if __name__ == "__main__":
     assert captures > 0 and fails > 0, "Should see both capture outcomes"
     print(f"[PASS] capture_superposed: {captures} successes, {fails} failures over 60 runs")
 
-    # --- Test 6: entangle_move stub ---
+    # --- Test 6: entangle_move (real implementation) ---
     b6 = Board()
-    pa = b6.piece_at("a1")
-    pb = b6.piece_at("h1")
-    log6 = entangle_move(b6, None, pa, pb)
-    assert "STUB" in log6
-    print(f"[PASS] entangle_move stub returns: {log6}")
+    e6 = QuantumBackend()
+    pa = b6.piece_at("a1")  # white rook
+    pb = b6.piece_at("h1")  # white rook
+    log6 = entangle_move(b6, e6, pa, pb)
+    assert "Entangled" in log6
+    assert pa["entangled_with"] == [pb["qubit_id"]]
+    assert pb["entangled_with"] == [pa["qubit_id"]]
+    assert e6.is_entangled(pa["qubit_id"])
+    print(f"[PASS] entangle_move: {log6}")
+
+    # --- Test 7: entangled pieces collapse together ---
+    b7 = Board()
+    e7 = QuantumBackend()
+    p7a = b7.piece_at("a2")
+    p7b = b7.piece_at("b2")
+    entangle_move(b7, e7, p7a, p7b)
+    # Measure entangled pair - both should collapse to same outcome
+    outcome_a, outcomes = e7.measure_entangled(p7a["qubit_id"])
+    assert outcomes[p7a["qubit_id"]] == outcomes[p7b["qubit_id"]], "Entangled pieces should have same outcome"
+    print(f"[PASS] Entangled measurement: both collapsed to {outcome_a}")
 
     print("\n" + "=" * 60)
     print("  All quantum_rules.py tests passed!")
