@@ -111,15 +111,16 @@ class GameManager:
             quantum_mode - active quantum mode string or None
         """
         return {
-            "pieces":       self.board.get_pieces_list(),
-            "selected":     self.selected_sq,
-            "valid_moves":  self.valid_moves,
-            "current_turn": self.current_turn,
-            "check_king":   self.board.king_square_if_in_check(self.current_turn),
-            "event_log":    self.event_log,
-            "game_over":    self.game_over,
-            "game_result":  self.game_result,
-            "quantum_mode": self.quantum_mode,
+            "pieces":          self.board.get_pieces_list(),
+            "selected":        self.selected_sq,
+            "valid_moves":     self.valid_moves,
+            "current_turn":    self.current_turn,
+            "check_king":      self.board.king_square_if_in_check(self.current_turn),
+            "event_log":       self.event_log,
+            "game_over":       self.game_over,
+            "game_result":     self.game_result,
+            "quantum_mode":    self.quantum_mode,
+            "backend_label":   self.engine.status_label,
         }
 
     # ------------------------------------------------------------------

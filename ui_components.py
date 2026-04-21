@@ -8,7 +8,7 @@ from constants import *
 
 # This is where you will implement the draw_hud() function that renders the
 # Quantum State HUD panel on the right side of the screen. This panel is crucial
-def draw_hud(screen: pygame.Surface, pieces: list[dict], tick: int, event_log = None):
+def draw_hud(screen: pygame.Surface, pieces: list[dict], tick: int, event_log=None, backend_label: str = "Simulator (local)"):
     """
     Draw the Quantum State HUD panel on the right side of the screen.
  
@@ -139,10 +139,13 @@ def draw_hud(screen: pygame.Surface, pieces: list[dict], tick: int, event_log = 
 
     pulse = math.sin(tick * 0.08)
     dot_alpha = int(150 + pulse * 80)
+    is_real_hw = backend_label.startswith("IBM Quantum:")
+    dot_color = (0, 220, 120) if is_real_hw else ENTANGLE_COLOR
     dot_surf = pygame.Surface((12, 12), pygame.SRCALPHA)
-    pygame.draw.circle(dot_surf, (*ENTANGLE_COLOR, dot_alpha), (6, 6), 5)
+    pygame.draw.circle(dot_surf, (*dot_color, dot_alpha), (6, 6), 5)
     screen.blit(dot_surf, (hud_x + 10, cursor_y + 2))
-    status = FONT_HUD_B.render("IBM Quantum: Aer Simulator", True, HUD_TEXT)
+    label_color = (0, 220, 120) if is_real_hw else HUD_TEXT
+    status = FONT_HUD_B.render(backend_label, True, label_color)
     screen.blit(status, (hud_x + 26, cursor_y + 1))
 
 def _get_entangled_pairs(pieces: list[dict]) -> list[tuple]:

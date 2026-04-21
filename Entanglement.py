@@ -24,7 +24,8 @@ except ImportError:
 
 # IBM Quantum Cloud support
 try:
-    from qiskit_ibm_runtime import QiskitRuntimeService
+    from qiskit_ibm_runtime import QiskitRuntimeService, SamplerV2 as _IBMSampler
+    from qiskit.transpiler.preset_passmanagers import generate_preset_pass_manager
     HAS_IBM_QUANTUM = True
 except ImportError:
     HAS_IBM_QUANTUM = False
@@ -82,7 +83,7 @@ class QuantumBackend:
                 print("[QuantumBackend] IBM Quantum not available, falling back to simulated")
                 self._mode = QuantumBackend.SIMULATED
             else:
-                self._setup_ibm_backend(ibm_token, ibm_backend or IBM_BACKEND_NAME)
+                self._setup_ibm_backend(ibm_token, ibm_backend or IBM_BACKEND)
         elif mode == QuantumBackend.AER:
             if not HAS_QISKIT:
                 print("[QuantumBackend] Qiskit not available, falling back to simulated")
@@ -94,12 +95,10 @@ class QuantumBackend:
             print("[QuantumBackend] Using simulated quantum")
 
     def _setup_ibm_backend(self, token: str, backend_name: str):
-        """Connect to IBM Quantum cloud."""
-        # Priority: 1) explicit token param, 2) config.py, 3) environment variable
+        """Connect to IBM Quantum cloud and set up SamplerV2 + transpiler pass manager."""
         if not token:
             token = IBM_QUANTUM_TOKEN
         if not token:
-            import os
             token = os.environ.get("IBM_QUANTUM_TOKEN", "")
 
         if not token:
@@ -108,9 +107,16 @@ class QuantumBackend:
             return
 
         try:
-            self._service = QiskitRuntimeService(channel="ibm_quantum", token=token)
-            self._backend = self._service.backend(backend_name)
+            self._service = QiskitRuntimeService(channel="ibm_quantum_platform", token=token)
+            self._ibm_backend = self._service.backend(backend_name)
+            # Transpiler pass manager converts circuits to the backend's ISA
+            self._pass_manager = generate_preset_pass_manager(
+                backend=self._ibm_backend, optimization_level=1
+            )
+            # SamplerV2 is the modern primitive for circuit sampling on IBM hardware
+            self._sampler = _IBMSampler(mode=self._ibm_backend)
             print(f"[QuantumBackend] Connected to IBM Quantum: {backend_name}")
+            print("[QuantumBackend] NOTE: IBM hardware jobs are queued — each measurement may take several minutes.")
         except Exception as e:
             print(f"[QuantumBackend] Failed to connect to IBM: {e}, falling back to simulated")
             self._mode = QuantumBackend.SIMULATED
@@ -120,9 +126,18 @@ class QuantumBackend:
         """Current backend mode."""
         return self._mode
 
+    @property
+    def status_label(self) -> str:
+        """Short display string for the HUD footer."""
+        if self._mode == QuantumBackend.IBM and hasattr(self, '_ibm_backend'):
+            return f"IBM Quantum: {self._ibm_backend.name}"
+        elif self._mode == QuantumBackend.AER:
+            return "Aer Simulator (local)"
+        return "Simulator (local)"
+
     def is_ibm_connected(self) -> bool:
         """True if connected to real IBM Quantum hardware."""
-        return self._mode == QuantumBackend.IBM and hasattr(self, '_backend')
+        return self._mode == QuantumBackend.IBM and hasattr(self, '_ibm_backend')
 
     # -------------------------------------------------------------------------
     # Qubit allocation
@@ -184,10 +199,13 @@ class QuantumBackend:
         return int(list(result.keys())[0])
 
     def _run_ibm_circuit(self, qc: QuantumCircuit) -> int:
-        """Execute circuit on IBM Quantum hardware."""
-        job = self._backend.run(qc, shots=1)
-        result = job.result().get_counts()
-        return int(list(result.keys())[0])
+        """Execute circuit on IBM Quantum hardware via SamplerV2."""
+        isa_qc = self._pass_manager.run(qc)
+        job = self._sampler.run([isa_qc], shots=1024)
+        counts = job.result()[0].data.c.get_counts()
+        # Majority vote over 1024 shots — more reliable than a single noisy shot
+        outcome = max(counts, key=counts.get)
+        return int(outcome[-1])  # last (least-significant) bit
 
     # -------------------------------------------------------------------------
     # Entanglement (Bell state)
@@ -261,12 +279,14 @@ class QuantumBackend:
         return measured, {0: measured}
 
     def _run_ibm_bell_circuit(self) -> tuple[int, dict[int, int]]:
-        """Execute Bell state circuit on IBM Quantum hardware."""
+        """Execute Bell state circuit on IBM Quantum hardware via SamplerV2."""
         qc = self._create_bell_circuit()
-        job = self._backend.run(qc, shots=1)
-        result = job.result().get_counts()
-        outcome_str = list(result.keys())[0]
-        measured = int(outcome_str[0])
+        isa_qc = self._pass_manager.run(qc)
+        job = self._sampler.run([isa_qc], shots=1024)
+        counts = job.result()[0].data.c.get_counts()
+        # Bell state should yield '00' or '11'; majority vote picks the dominant outcome
+        outcome_str = max(counts, key=counts.get)
+        measured = int(outcome_str[-1])  # last bit (qubit 0)
         return measured, {0: measured}
 
     def _clear_entanglement(self, qubit_id: int) -> None:
