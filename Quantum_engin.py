@@ -13,9 +13,9 @@ Qubit states:
     classical  — piece is at one definite square (default)
     superposed — H gate applied: 50/50 collapse on measurement
 """
-
-from __future__ import annotations
-import random
+from qiskit_ibm_runtime import QiskitRuntimeService, SamplerV2 as Sampler
+from qiskit.transpiler.preset_passmanagers import generate_preset_pass_manager
+from qiskit import QuantumCircuit
 
 
 class QuantumEngine:
