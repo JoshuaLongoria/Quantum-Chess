@@ -178,12 +178,13 @@ class Board:
         """
         Return the set of squares that *color* attacks.
 
-        Used for check detection.  Pawns attack diagonally (not forward).
-        Superposed pieces attack from BOTH of their potential positions
-        because the piece *might* be there — uncertainty is real.
+        Used for check detection. Superposed (ghost) pieces are excluded —
+        they don't threaten squares until measured or captured.
         """
         attacked: set[str] = set()
         for piece in self.pieces_by_color(color):
+            if piece.get("superposed"):
+                continue  # ghosts don't threaten anything
             for origin in piece["positions"]:
                 attacked.update(
                     self._raw_attacks(piece, origin)

@@ -33,7 +33,7 @@ import pygame
 import math
 import sys
 from board import to_grid
-from constants import *
+from constants import *  # includes GHOST_WHITE_FX, GHOST_BLACK_FX
 from ui_components import draw_hud, _get_entangled_pairs
  
 # ---------------------------------------------------------------------------
@@ -233,18 +233,20 @@ def draw_ghost_piece(screen: pygame.Surface, piece: dict, col: int, row: int):
     """
  
     symbol = PIECE_SYMBOLS.get((piece["type"], piece["color"]), "?")
-    ghost_color = GHOST_WHITE if piece["color"] == "white" else GHOST_BLACK
- 
+    is_white = piece["color"] == "white"
+    ghost_color = GHOST_WHITE    if is_white else GHOST_BLACK
+    fx_color    = GHOST_WHITE_FX if is_white else GHOST_BLACK_FX
+
     ghost_surf = pygame.Surface((SQUARE_SIZE, SQUARE_SIZE), pygame.SRCALPHA)
- 
-    # Blue-white shimmer background on the square to signal quantum state
+
+    # Team-colored shimmer background to signal quantum state
     shimmer = pygame.Surface((SQUARE_SIZE, SQUARE_SIZE), pygame.SRCALPHA)
-    shimmer.fill((100, 160, 255, 30))
+    shimmer.fill((*fx_color, 28))
     ghost_surf.blit(shimmer, (0, 0))
- 
-    # Dashed border around the ghost square to signal superposition
+
+    # Team-colored border around the ghost square
     border_surf = pygame.Surface((SQUARE_SIZE, SQUARE_SIZE), pygame.SRCALPHA)
-    pygame.draw.rect(border_surf, (100, 180, 255, 120),
+    pygame.draw.rect(border_surf, (*fx_color, 140),
                      pygame.Rect(2, 2, SQUARE_SIZE - 4, SQUARE_SIZE - 4), width=2)
     ghost_surf.blit(border_surf, (0, 0))
  

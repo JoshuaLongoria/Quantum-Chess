@@ -31,7 +31,6 @@ from quantum_rules import (
     superposition_move,
     collapse_piece,
     entangle_move,
-    capture_superposed,
 )
 
 
@@ -89,7 +88,8 @@ class GameManager:
         self.game_over: bool = False
         self.game_result: str = ""
         self.quantum_mode: Optional[str] = None   # "superposition" | "measure" | "entangle"
-        self._q_piece: Optional[dict] = None      # first piece in multi-step quantum move
+        self._q_piece: Optional[dict] = None      # piece selected for quantum move
+        self._q_sq_a:  Optional[str]  = None      # first ghost destination chosen
 
     # ------------------------------------------------------------------
     # Game-state dict (consumed by renderer every frame)
@@ -146,7 +146,7 @@ class GameManager:
         self.quantum_mode = mode
 
         hints = {
-            "superposition": "SUPERPOSITION: select your piece, then click destination.",
+            "superposition": "SUPERPOSITION: select piece, then click 2 ghost squares.",
             "measure":       "MEASURE: click a superposed piece to collapse it.",
             "entangle":      "ENTANGLE: click two pieces to link them. [stub]",
         }
@@ -156,6 +156,7 @@ class GameManager:
         """Reset quantum mode state and clear selection."""
         self.quantum_mode = None
         self._q_piece = None
+        self._q_sq_a  = None
         self.deselect()
 
     # ------------------------------------------------------------------
@@ -205,6 +206,9 @@ class GameManager:
 
         if self.selected_piece is None:
             if clicked_piece and clicked_piece["color"] == self.current_turn:
+                if clicked_piece["superposed"]:
+                    self.log("Superposed pieces can't move. Use M to measure first.")
+                    return
                 self.select(clicked_piece, square)
             return
 
@@ -213,6 +217,9 @@ class GameManager:
             return
 
         if clicked_piece and clicked_piece["color"] == self.current_turn:
+            if clicked_piece["superposed"]:
+                self.log("Superposed pieces can't move. Use M to measure first.")
+                return
             self.select(clicked_piece, square)
             return
 
@@ -228,10 +235,12 @@ class GameManager:
 
     def _handle_superposition_click(self, square: Optional[str]):
         """
-        Two-step handler for the superposition move.
+        Three-step handler for the superposition move.
 
         Step 1: click own (non-superposed) piece to select it.
-        Step 2: click a legal destination to split the piece there.
+        Step 2: click any legal square (or current square) for the first ghost.
+        Step 3: click a different legal square for the second ghost.
+               The original square disappears; both chosen squares show ghosts.
         """
         if square is None:
             self._cancel_quantum_mode()
@@ -241,27 +250,46 @@ class GameManager:
             # Step 1 — select the piece
             piece = self.board.piece_at(square)
             if piece and piece["color"] == self.current_turn and not piece["superposed"]:
+                if piece.get("entangled_with"):
+                    self.log(f"{piece['type'].capitalize()} is entangled — cannot split.")
+                    return   # no turn loss — just block and wait
                 self._q_piece = piece
                 self.selected_sq = square
-                self.valid_moves = self.board.get_legal_moves(piece)
-                self.log(f"Select destination for {piece['type'].capitalize()}.")
+                # Legal moves + the piece's own square (ghost can stay here too)
+                origin = piece["positions"][0]
+                self.valid_moves = list(set(self.board.get_legal_moves(piece) + [origin]))
+                self.log(f"{piece['type'].capitalize()} selected. Click first ghost square.")
             else:
                 self.log("Select one of your non-superposed pieces.")
-        else:
-            # Step 2 — pick destination (sq_b); sq_a is the piece's current square
-            sq_a = self._q_piece["positions"][0]
-            sq_b = square
 
-            if sq_b not in self.valid_moves:
-                self.log("Invalid destination. Move cancelled.")
-                self._cancel_quantum_mode()
+        elif self._q_sq_a is None:
+            # Step 2 — first ghost destination
+            if square not in self.valid_moves:
+                self.log("Invalid square. Pick a reachable square for ghost 1.")
+                return
+            self._q_sq_a = square
+            self.selected_sq = square
+            # Remove the chosen square from options so both ghosts must differ
+            self.valid_moves = [sq for sq in self.valid_moves if sq != square]
+            self.log(f"Ghost 1 at {square}. Click second ghost square.")
+
+        else:
+            # Step 3 — second ghost destination
+            if square == self._q_sq_a:
+                self.log("Both ghosts must be on different squares.")
+                return
+            if square not in self.valid_moves:
+                self.log("Invalid square. Pick a reachable square for ghost 2.")
                 return
 
-            msg = superposition_move(self.board, self.engine, self._q_piece, sq_a, sq_b)
+            msg = superposition_move(self.board, self.engine, self._q_piece, self._q_sq_a, square)
             self.log(msg)
-            self._cancel_quantum_mode()
-            self.next_turn()
-            self.check_end_conditions()
+            if self._q_piece["superposed"]:  # move succeeded
+                self._cancel_quantum_mode()
+                self.next_turn()
+                self.check_end_conditions()
+            else:
+                self._cancel_quantum_mode()  # failed — no turn loss
 
     def _handle_measure_click(self, square: Optional[str]):
         """
@@ -344,12 +372,15 @@ class GameManager:
         symbol = piece["type"].capitalize()
         capture_target = self.board.piece_at(target)
 
-        # Quantum capture: target is a superposed enemy piece
+        # Quantum capture: touching either ghost removes the entire superposed piece
         if (capture_target
                 and capture_target["color"] != piece["color"]
                 and capture_target["superposed"]):
-            msg = capture_superposed(self.board, self.engine, piece, capture_target, target)
-            self.log(msg)
+            tgt_sym = capture_target["type"].capitalize()
+            tgt_col = capture_target["color"].capitalize()
+            self.board.remove_piece(capture_target)
+            self.board.move_piece(piece, target)
+            self.log(f"{piece['color'].capitalize()} {symbol} captures {tgt_col} {tgt_sym} -- superposition dissolved")
             self.deselect()
             self.next_turn()
             self.check_end_conditions()

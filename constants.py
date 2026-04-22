@@ -32,9 +32,11 @@ PIECE_WHITE = (230, 235, 245)
 PIECE_BLACK = ( 30, 35, 55)
 PIECE_OUTLINE = (90, 110, 150)
 
-GHOST_WHITE = (180, 200, 240)
-GHOST_BLACK = (60, 75, 120)
-GHOST_ALPHA = 110 #GHOST PIECES 
+GHOST_WHITE     = (140, 230, 255)   # icy cyan glyph — white team ghosts
+GHOST_BLACK     = (255, 90,  210)   # hot magenta glyph — black team ghosts
+GHOST_WHITE_FX  = (100, 210, 255)   # cyan shimmer/border for white ghosts
+GHOST_BLACK_FX  = (255, 60,  200)   # magenta shimmer/border for black ghosts
+GHOST_ALPHA = 110 #GHOST PIECES
 
 ENTANGLE_COLOR = (80, 220, 255) 
 ENTANGLE_ALPHA = 160
