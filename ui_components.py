@@ -43,7 +43,7 @@ def draw_hud(screen: pygame.Surface, pieces: list[dict], tick: int, event_log=No
  
     # --- Title bar -------------------------------------------------------
     title_bar = pygame.Rect(hud_x, hud_y, HUD_WIDTH - 20, 34)
-    pygame.draw.rect(screen, (30, 40, 80), title_bar, border_radius=6)
+    pygame.draw.rect(screen, (58, 207, 180), title_bar, border_radius=6)
     title = FONT_HUD_T.render("ψ| QUANTUM STATE |ψ", True, HUD_TITLE)
     screen.blit(title, (hud_x + 10, hud_y + 8))
  
@@ -122,8 +122,8 @@ def draw_hud(screen: pygame.Surface, pieces: list[dict], tick: int, event_log=No
 
 
 #4/6 demo status is gone replace with real event log from game_manager
-# show last 2 events 
-    events = event_log[-2:] if event_log else []
+# show last 5 events 
+    events = event_log[-5:] if event_log else []
     for ev in events:
         hud_wrapped(f"  {ev}", HUD_ACCENT)
  
@@ -140,7 +140,7 @@ def draw_hud(screen: pygame.Surface, pieces: list[dict], tick: int, event_log=No
     pulse = math.sin(tick * 0.08)
     dot_alpha = int(150 + pulse * 80)
     is_real_hw = backend_label.startswith("IBM Quantum:")
-    dot_color = (0, 220, 120) if is_real_hw else ENTANGLE_COLOR
+    dot_color = (0, 220, 120) if is_real_hw else SIMULATION_COLOR
     dot_surf = pygame.Surface((12, 12), pygame.SRCALPHA)
     pygame.draw.circle(dot_surf, (*dot_color, dot_alpha), (6, 6), 5)
     screen.blit(dot_surf, (hud_x + 10, cursor_y + 2))
