@@ -5,10 +5,34 @@ import pygame
 import math
 from constants import *
 
+def get_forfeit_button_rect():
+    hud_x = BOARD_OFFSET_X + BOARD_PX + 20
+    hud_y = BOARD_OFFSET_Y
+    hud_h = BOARD_PX
+    btn_w = 180
+    btn_h = 42
+    btn_x = hud_x + 35
+    btn_y = hud_y + hud_h - 90
+
+    return pygame.Rect(btn_x, btn_y, btn_w, btn_h)
+
+def draw_forfeit_button(screen: pygame.Surface, current_turn: str):
+    rect = get_forfeit_button_rect()
+    pygame.draw.rect(screen, (170, 40, 40), rect, border_radius=8)
+    pygame.draw.rect(screen, (235, 90, 90), rect, width=2, border_radius=8)
+
+    label = FONT_HUD_T.render(
+        f"Forfeit ({current_turn.capitalize()})",
+        True,
+        (255, 255, 255)
+    )
+    lx = rect.x + rect.width // 2 - label.get_width() // 2
+    ly = rect.y + rect.height // 2 - label.get_height() // 2
+    screen.blit(label, (lx, ly))
 
 # This is where you will implement the draw_hud() function that renders the
 # Quantum State HUD panel on the right side of the screen. This panel is crucial
-def draw_hud(screen: pygame.Surface, pieces: list[dict], tick: int, event_log=None, backend_label: str = "Simulator (local)"):
+def draw_hud(screen: pygame.Surface, pieces: list[dict], tick: int, event_log=None, backend_label: str = "Simulator (local)", current_turn: str = "white", game_result: str = ""):
     """
     Draw the Quantum State HUD panel on the right side of the screen.
  
@@ -127,14 +151,17 @@ def draw_hud(screen: pygame.Surface, pieces: list[dict], tick: int, event_log=No
         hud_line("  No entangled pairs", HUD_TEXT)
  
     # --- Section: Quantum Event Log ------------------------------------
-    hud_section("LAST EVENT")
-
-
-#4/6 demo status is gone replace with real event log from game_manager
-# show last 5 events 
+    hud_section("LAST EVENT") 
     events = event_log[-5:] if event_log else []
     for ev in events:
         hud_wrapped(f"  {ev}", HUD_ACCENT)
+
+    if game_result:
+        hud_section("RESULT")
+        hud_wrapped(game_result, HUD_ACCENT)
+
+    if not game_result:
+        draw_forfeit_button(screen, current_turn)
  
     # --- Footer: IBM Quantum status indicator --------------------------
 
