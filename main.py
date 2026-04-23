@@ -7,6 +7,7 @@ from renderer import render_frame
 from game_manager import GameManager, pixel_to_square
 from lobby import LobbyScreen
 from network import NetworkManager
+from ui_components import draw_hud, get_forfeit_button_rect
 
 # ── CLI args ─────────────────────────────────────────────────────────────────
 parser = argparse.ArgumentParser(description="Quantum Chess")
@@ -76,19 +77,26 @@ while True:
             sys.exit()
 
         elif event.type == pygame.MOUSEBUTTONDOWN:
-            # In LAN mode only process local clicks on our own turn
             if my_color is None or gm.current_turn == my_color:
                 x, y = pygame.mouse.get_pos()
-                sq           = pixel_to_square(x, y)
-                was_measure  = (gm.quantum_mode == "measure")
+
+                forfeit_rect = get_forfeit_button_rect()
+
+                if forfeit_rect.collidepoint(x, y):
+                    gm.forfeit()
+                    if net:
+                        net.send({"type": "forfeit"})
+                    continue
+
+                sq = pixel_to_square(x, y)
+                was_measure = (gm.quantum_mode == "measure")
                 gm.handle_click(x, y)
+
                 if net and sq:
-                    # Detect whether a measurement actually completed:
-                    # _handle_measure_click clears quantum_mode on success.
                     measure_fired = was_measure and gm.quantum_mode is None
                     if measure_fired:
                         net.send({
-                            "type":   "measure_click",
+                            "type": "measure_click",
                             "square": sq,
                             "result": gm.engine.last_result,
                         })
@@ -129,6 +137,8 @@ while True:
                 gm.set_quantum_mode(msg.get("mode", ""))
             elif t == "cancel":
                 gm._cancel_quantum_mode()
+            elif t == "forfeit":
+                gm.forfeit()
 
         # Show a warning if the peer disconnects mid-game
         if not net.connected and not gm.game_over:
