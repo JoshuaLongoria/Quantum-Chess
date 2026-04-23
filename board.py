@@ -186,17 +186,25 @@ class Board:
         """
         Return the set of squares that *color* attacks.
 
-        Used for check detection. Superposed (ghost) pieces are excluded —
-        they don't threaten squares until measured or captured.
+        Used for check detection. Superposed (ghost) pieces are excluded.
+        Entangled pieces threaten the union of squares reachable by every
+        piece type in their entanglement group (e.g. pawn+queen threatens
+        both pawn diagonals AND all queen rays).
         """
         attacked: set[str] = set()
         for piece in self.pieces_by_color(color):
             if piece.get("superposed"):
-                continue  # ghosts don't threaten anything
+                continue
             for origin in piece["positions"]:
-                attacked.update(
-                    self._raw_attacks(piece, origin)
-                )
+                group_id = piece.get("entanglement_group")
+                if group_id is not None:
+                    group = self.get_entanglement_group(group_id)
+                    if group:
+                        for ptype in group.get_piece_types():
+                            temp = {"type": ptype, "color": color}
+                            attacked.update(self._raw_attacks(temp, origin))
+                        continue
+                attacked.update(self._raw_attacks(piece, origin))
         return attacked
 
     # ------------------------------------------------------------------
@@ -284,7 +292,7 @@ class Board:
     # ------------------------------------------------------------------
 
     def get_legal_moves(self, piece: dict) -> list[str]:
-        """Get fully legal moves: pseudo-legal candidates filtered to exclude any that leave own king in check."""
+        """Get fully legal moves: pseudo-legal candidates filtered to exclude any that leave own king in check or capture the enemy king."""
         if piece.get("superposed"):
             return []
 
@@ -296,7 +304,13 @@ class Board:
         else:
             pseudo = get_combined_legal_moves(piece, self)
 
-        return [sq for sq in pseudo if self._is_move_safe(piece, origin, sq)]
+        # The enemy king can never be a capture target — the game ends via checkmate first
+        opponent    = "black" if piece["color"] == "white" else "white"
+        opp_king    = self.find_king(opponent)
+        king_squares = set(opp_king["positions"]) if opp_king else set()
+
+        return [sq for sq in pseudo
+                if sq not in king_squares and self._is_move_safe(piece, origin, sq)]
     
     # ------------------------------------------------------------------
     # Pseudo-legal generation (ignores check legality)
