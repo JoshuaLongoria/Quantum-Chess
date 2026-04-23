@@ -7,3 +7,8 @@ __pycache__/
 venv/
 .venv/
 
+#API keys — never commit credentials
+apikey.json
+*.env
+.env
+

@@ -32,6 +32,7 @@ from quantum_rules import (
     collapse_piece,
     entangle_move,
     break_entanglement_on_capture,
+    capture_superposed,
 )
 
 
@@ -91,6 +92,7 @@ class GameManager:
         self.quantum_mode: Optional[str] = None   # "superposition" | "measure" | "entangle"
         self._q_piece: Optional[dict] = None      # piece selected for quantum move
         self._q_sq_a:  Optional[str]  = None      # first ghost destination chosen
+        self._last_capture_result: Optional[int] = None  # set when a quantum ghost capture occurs; used by LAN to sync the result
 
     # ------------------------------------------------------------------
     # Game-state dict (consumed by renderer every frame)
@@ -280,6 +282,9 @@ class GameManager:
             # Step 1 — select the piece
             piece = self.board.piece_at(square)
             if piece and piece["color"] == self.current_turn and not piece["superposed"]:
+                if piece["type"] == "king":
+                    self.log("The king cannot enter superposition.")
+                    return   # no turn loss
                 if piece.get("entangled_with") or piece.get("entanglement_group") is not None:
                     self.log(f"{piece['type'].capitalize()} is entangled — cannot split.")
                     return   # no turn loss — just block and wait
@@ -341,21 +346,29 @@ class GameManager:
 
     def _handle_entangle_click(self, square: Optional[str]):
         """
-        Two-step handler for the entangle move (stub until Entanglement.py arrives).
+        Two-step handler for the entangle move.
 
         Step 1: click first own piece.
         Step 2: click second own piece to link them.
+        Invalid selections at either step are rejected without a turn loss.
         """
         if square is None:
             self._cancel_quantum_mode()
             return
-        
+
         piece = self.board.piece_at(square)
         if piece is None or piece["color"] != self.current_turn:
             self.log("Select one of your own pieces to entangle.")
             return
-        
+
         if self._q_piece is None:
+            # Reject ineligible pieces before accepting the first selection
+            if piece.get("entanglement_group") is not None or piece.get("entangled_with"):
+                self.log(f"{piece['type'].capitalize()} is already entangled — pick a different piece.")
+                return
+            if piece.get("superposed"):
+                self.log("Cannot entangle a superposed piece — measure it first.")
+                return
             self._q_piece = piece
             self.selected_sq = square
             self.log(f"Entangle: now click the second piece to link with {piece['type'].capitalize()}.")
@@ -363,12 +376,14 @@ class GameManager:
             if piece is self._q_piece:
                 self.log("Cannot entangle a piece with itself.")
                 return
-            
+
             msg = entangle_move(self.board, self.engine, self._q_piece, piece)
             self.log(msg)
             self._cancel_quantum_mode()
-            self.next_turn()
-            self.check_end_conditions()
+            if "Entangled" in msg:
+                # Only advance the turn when entanglement actually succeeded
+                self.next_turn()
+                self.check_end_conditions()
 
     # ------------------------------------------------------------------
     # Selection helpers
@@ -395,23 +410,24 @@ class GameManager:
         Move the selected piece to *target*, handle captures, log events,
         switch turns, and check for game-ending conditions.
 
-        If the target holds a superposed enemy piece, a quantum measurement
-        is triggered via capture_superposed() instead of a normal capture.
+        If the target holds a superposed enemy piece a 50/50 quantum
+        measurement decides the outcome: the ghost either collapses to the
+        attacked square (capture succeeds) or survives at its other position
+        (capture fails, attacker stays put, turn is still spent).
         """
+        self._last_capture_result = None
         piece = self.selected_piece
         origin = self.selected_sq
         symbol = piece["type"].capitalize()
         capture_target = self.board.piece_at(target)
 
-        # Quantum capture: touching either ghost removes the entire superposed piece
+        # Quantum capture: 50/50 whether the ghost is actually there
         if (capture_target
                 and capture_target["color"] != piece["color"]
                 and capture_target["superposed"]):
-            tgt_sym = capture_target["type"].capitalize()
-            tgt_col = capture_target["color"].capitalize()
-            self.board.remove_piece(capture_target)
-            self.board.move_piece(piece, target)
-            self.log(f"{piece['color'].capitalize()} {symbol} captures {tgt_col} {tgt_sym} -- superposition dissolved")
+            msg = capture_superposed(self.board, self.engine, piece, capture_target, target)
+            self._last_capture_result = self.engine.last_result
+            self.log(msg)
             self.deselect()
             self.next_turn()
             self.check_end_conditions()

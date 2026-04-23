@@ -215,9 +215,12 @@ def capture_superposed(board: Board, engine: QuantumBackend,
         return (f"{atk_sym} captures {tgt_col} {tgt_sym} -- "
                 f"collapsed to {capture_sq} [success]")
     else:
+        # Ghost survived at the other square — rebuild the map first so capture_sq
+        # is seen as empty (ghost is now only at collapsed_to), then move the attacker in
         board._rebuild_map()
-        return (f"Capture failed -- {tgt_col} {tgt_sym} collapsed to "
-                f"{collapsed_to}, not {capture_sq}")
+        board.move_piece(attacker, capture_sq)
+        return (f"{tgt_col} {tgt_sym} collapsed to {collapsed_to} — "
+                f"{atk_sym} moves to {capture_sq} [ghost survived]")
 
 
 # =========================================================================

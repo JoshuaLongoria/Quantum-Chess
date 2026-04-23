@@ -115,7 +115,14 @@ while True:
 
                 if net and sq:
                     measure_fired = was_measure and gm.quantum_mode is None
-                    if measure_fired:
+                    if gm._last_capture_result is not None:
+                        # Ghost capture — send the quantum result so peer gets same outcome
+                        net.send({
+                            "type":   "quantum_capture",
+                            "square": sq,
+                            "result": gm._last_capture_result,
+                        })
+                    elif measure_fired:
                         net.send({
                             "type": "measure_click",
                             "square": sq,
@@ -151,7 +158,10 @@ while True:
             if t == "click":
                 gm.handle_square(msg.get("square"))
             elif t == "measure_click":
-                # Seed the engine so both sides collapse to the same square
+                gm.engine.seed_next_result(msg.get("result", 0))
+                gm.handle_square(msg.get("square"))
+            elif t == "quantum_capture":
+                # Seed so both peers collapse the ghost to the same square
                 gm.engine.seed_next_result(msg.get("result", 0))
                 gm.handle_square(msg.get("square"))
             elif t == "key":
