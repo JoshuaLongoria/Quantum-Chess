@@ -4,7 +4,6 @@
 
 import pygame
 
-
 #---Window Layout---
 pygame.init()
 
