@@ -284,14 +284,19 @@ class Board:
     # ------------------------------------------------------------------
 
     def get_legal_moves(self, piece: dict) -> list[str]:
-        """Get legal moves, accounting for entanglement."""
+        """Get fully legal moves: pseudo-legal candidates filtered to exclude any that leave own king in check."""
         if piece.get("superposed"):
             return []
-        
+
+        origin   = piece["positions"][0]
         group_id = piece.get("entanglement_group")
+
         if group_id is None:
-            return self.get_legal_moves_single_type(piece["type"], piece["positions"][0], piece["color"])
-        return get_combined_legal_moves(piece, self)
+            pseudo = self.get_legal_moves_single_type(piece["type"], origin, piece["color"])
+        else:
+            pseudo = get_combined_legal_moves(piece, self)
+
+        return [sq for sq in pseudo if self._is_move_safe(piece, origin, sq)]
     
     # ------------------------------------------------------------------
     # Pseudo-legal generation (ignores check legality)

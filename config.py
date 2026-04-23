@@ -6,12 +6,12 @@ That file is intentionally kept OUTSIDE the Quantum-Chess folder and is
 listed in .gitignore so it never gets committed or shared accidentally.
 
 Available backends on this account:
-  ibm_fez        (default)
-  ibm_marrakesh
-  ibm_kingston
+  ibm_fez       (default) 
+  ibm_marrakesh 
+  ibm_kingston  
 
 Override from the command line without editing this file:
-  python main.py --mode ibm --backend ibm_marrakesh
+python main.py --mode ibm --backend ibm_marrakesh
 """
 import json
 import os

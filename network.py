@@ -255,6 +255,7 @@ class NetworkManager:
                 conn = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                 conn.settimeout(3)
                 conn.connect((host, GAME_PORT))
+                conn.settimeout(None)  # switch to blocking mode; timeout was only for connect()
                 print(f"[Network] Client: connected on attempt {attempt + 1}")
                 self._conn = conn
                 self._on_connected()
