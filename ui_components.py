@@ -30,6 +30,50 @@ def draw_forfeit_button(screen: pygame.Surface, current_turn: str):
     ly = rect.y + rect.height // 2 - label.get_height() // 2
     screen.blit(label, (lx, ly))
 
+def get_restart_button_rect():
+    hud_x = BOARD_OFFSET_X + BOARD_PX + 20
+    hud_y = BOARD_OFFSET_Y
+    hud_h = BOARD_PX
+
+    btn_w = 180
+    btn_h = 42
+    btn_x = hud_x + 35
+    btn_y = hud_y + hud_h - 140
+
+    return pygame.Rect(btn_x, btn_y, btn_w, btn_h)
+
+def get_quit_button_rect():
+    hud_x = BOARD_OFFSET_X + BOARD_PX + 20
+    hud_y = BOARD_OFFSET_Y
+    hud_h = BOARD_PX
+
+    btn_w = 180
+    btn_h = 42
+    btn_x = hud_x + 35
+    btn_y = hud_y + hud_h - 90
+
+    return pygame.Rect(btn_x, btn_y, btn_w, btn_h)
+
+def draw_restart_button(screen: pygame.Surface):
+    rect = get_restart_button_rect()
+    pygame.draw.rect(screen, (185, 150, 35), rect, border_radius=8)
+    pygame.draw.rect(screen, (240, 210, 90), rect, width=2, border_radius=8)
+
+    label = FONT_HUD_T.render("Restart", True, (20, 20, 20))
+    lx = rect.x + rect.width // 2 - label.get_width() // 2
+    ly = rect.y + rect.height // 2 - label.get_height() // 2
+    screen.blit(label, (lx, ly))
+
+def draw_quit_button(screen: pygame.Surface):
+    rect = get_quit_button_rect()
+    pygame.draw.rect(screen, (170, 40, 40), rect, border_radius=8)
+    pygame.draw.rect(screen, (235, 90, 90), rect, width=2, border_radius=8)
+
+    label = FONT_HUD_T.render("Quit", True, (255, 255, 255))
+    lx = rect.x + rect.width // 2 - label.get_width() // 2
+    ly = rect.y + rect.height // 2 - label.get_height() // 2
+    screen.blit(label, (lx, ly))
+
 # This is where you will implement the draw_hud() function that renders the
 # Quantum State HUD panel on the right side of the screen. This panel is crucial
 def draw_hud(screen: pygame.Surface, pieces: list[dict], tick: int, event_log=None, backend_label: str = "Simulator (local)", current_turn: str = "white", game_result: str = ""):
@@ -160,7 +204,9 @@ def draw_hud(screen: pygame.Surface, pieces: list[dict], tick: int, event_log=No
         hud_section("RESULT")
         hud_wrapped(game_result, HUD_ACCENT)
 
-    if not game_result:
+        draw_restart_button(screen)
+        draw_quit_button(screen)
+    else:
         draw_forfeit_button(screen, current_turn)
  
     # --- Footer: IBM Quantum status indicator --------------------------
