@@ -76,6 +76,8 @@ class QuantumBackend:
         self._entangled: dict[int, set[int]] = {}  # qubit -> entangled partners
         self._next_qubit: int = 0
         self._mode = mode
+        self._seeded_result: int | None = None  # pre-set by LAN receiver
+        self.last_result:    int        = 0     # read by LAN sender after collapse
 
         # Validate and set up backend
         if mode == QuantumBackend.IBM:
@@ -164,24 +166,40 @@ class QuantumBackend:
         """True if H gate applied and not yet measured."""
         return qubit_id in self._superposed
 
+    def seed_next_result(self, result: int) -> None:
+        """
+        Pre-seed the outcome of the next measure_superposition() call.
+        Used by the LAN receiver so both boards collapse to the same square.
+        """
+        self._seeded_result = result
+
     def measure_superposition(self, qubit_id: int) -> int:
         """
         Measure a superposed qubit, collapsing to 0 or 1.
+
+        If seed_next_result() was called beforehand (LAN sync), that value is
+        used instead of a random draw.  The result is always stored in
+        self.last_result so the LAN sender can read and broadcast it.
 
         Returns:
             0 or 1 — index into piece's positions list
             (0 = first position, 1 = second position)
         """
         if qubit_id not in self._superposed:
-            return 0  # classical — stays at positions[0]
+            self.last_result = 0
+            return 0
 
-        if self._mode == QuantumBackend.IBM:
+        if self._seeded_result is not None:
+            result = self._seeded_result
+            self._seeded_result = None
+        elif self._mode == QuantumBackend.IBM:
             result = self._run_ibm_circuit(self._create_hadamard_circuit())
         elif self._mode == QuantumBackend.AER:
             result = self._run_aer_circuit(self._create_hadamard_circuit())
         else:
             result = random.randint(0, 1)
 
+        self.last_result = result
         self._superposed.discard(qubit_id)
         return result
 

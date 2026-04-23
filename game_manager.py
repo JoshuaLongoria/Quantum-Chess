@@ -234,6 +234,25 @@ class GameManager:
     # Quantum click handlers
     # ------------------------------------------------------------------
 
+    def handle_square(self, square: Optional[str]):
+        """
+        Apply a game action for a given algebraic square.
+
+        Mirrors handle_click() but takes an algebraic square directly instead
+        of pixel coordinates.  Used by the LAN network loop to replay the
+        opponent's moves on the local board.
+        """
+        if self.game_over:
+            return
+        if self.quantum_mode == "superposition":
+            self._handle_superposition_click(square)
+        elif self.quantum_mode == "measure":
+            self._handle_measure_click(square)
+        elif self.quantum_mode == "entangle":
+            self._handle_entangle_click(square)
+        else:
+            self._handle_classical_click(square)
+
     def _handle_superposition_click(self, square: Optional[str]):
         """
         Three-step handler for the superposition move.
