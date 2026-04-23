@@ -160,6 +160,16 @@ class GameManager:
         self._q_sq_a  = None
         self.deselect()
 
+    def forfeit(self):
+        if self.game_over:
+            return
+
+        winner = "Black" if self.current_turn == "white" else "White"
+        self.game_over = True
+        self.game_result = f"Forfeit -- {winner} wins!"
+        self.log(self.game_result)
+        self._cancel_quantum_mode()
+
     # ------------------------------------------------------------------
     # Click handling — dispatches to classical or quantum path
     # ------------------------------------------------------------------
