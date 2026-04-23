@@ -8,8 +8,6 @@ import pygame
 #---Window Layout---
 pygame.init()
 
-
-
 BOARD_COLS = 8
 BOARD_ROWS = 8
 SQUARE_SIZE = 80
