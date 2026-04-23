@@ -315,6 +315,47 @@ def draw_entanglement_line(screen: pygame.Surface,
         pygame.draw.circle(end_surf, (*ENTANGLE_COLOR, alpha), (cx, cy), 8)
         pygame.draw.circle(end_surf, (*ENTANGLE_COLOR, alpha // 3), (cx, cy), 14)
     screen.blit(end_surf, (0, 0))
+
+
+def format_clock(ms: int) -> str:
+    total_seconds = max(0, ms // 1000)
+    minutes = total_seconds // 60
+    seconds = total_seconds % 60
+    return f"{minutes:02}:{seconds:02}"
+
+def draw_player_timers(screen: pygame.Surface, white_time_ms: int, black_time_ms: int, current_turn: str):
+    box_w = 180
+    box_h = 42
+    box_x = BOARD_OFFSET_X + BOARD_PX // 2 - box_w // 2
+
+    top_y = BOARD_OFFSET_Y - 52
+    bottom_y = BOARD_OFFSET_Y + BOARD_PX + 25
+
+    black_rect = pygame.Rect(box_x, top_y, box_w, box_h)
+    white_rect = pygame.Rect(box_x, bottom_y, box_w, box_h)
+
+    black_fill = (70, 70, 70) 
+    white_fill = (255, 255, 255)
+
+    pygame.draw.rect(screen, black_fill, black_rect, border_radius=8)
+    pygame.draw.rect(screen, (180, 180, 180), black_rect, width=2, border_radius=8)
+
+    pygame.draw.rect(screen, white_fill, white_rect, border_radius=8)
+    pygame.draw.rect(screen, (180, 180, 180), white_rect, width=2, border_radius=8)
+
+    black_label = FONT_HUD_T.render(f"Black  {format_clock(black_time_ms)}", True, (255, 255, 255))
+    white_label = FONT_HUD_T.render(f"White  {format_clock(white_time_ms)}", True, (20, 20, 20))
+
+    screen.blit(
+        black_label,
+        (black_rect.x + black_rect.width // 2 - black_label.get_width() // 2,
+         black_rect.y + black_rect.height // 2 - black_label.get_height() // 2)
+    )
+    screen.blit(
+        white_label,
+        (white_rect.x + white_rect.width // 2 - white_label.get_width() // 2,
+         white_rect.y + white_rect.height // 2 - white_label.get_height() // 2)
+    )
  
  
 # render_frame is the main function Person C will call from main.py each frame to draw everything.
@@ -358,6 +399,14 @@ def render_frame(screen: pygame.Surface, game_state: dict, tick: int):
  
     # 3. Coordinate labels
     draw_coordinates(screen)
+
+    # 3b. Player timers
+    draw_player_timers(
+        screen,
+        game_state.get("white_time_ms", 10 * 60 * 1000),
+        game_state.get("black_time_ms", 10 * 60 * 1000),
+        game_state.get("current_turn", "white"),
+    ) 
  
     # 4a. Highlight selected square
     if selected:
