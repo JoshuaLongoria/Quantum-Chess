@@ -111,10 +111,14 @@ class NetworkManager:
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        local_ip = get_local_ip()
+        sock.bind((local_ip, 0))  # force broadcast out the WiFi interface
+        # subnet broadcast (e.g. 192.168.1.255) is more reliable than 255.255.255.255
+        subnet_broadcast = local_ip.rsplit(".", 1)[0] + ".255"
         payload = json.dumps({"tag": _GAME_TAG, "id": self.session_id}).encode()
         while self._running:
             try:
-                sock.sendto(payload, (_BROADCAST, DISCOVERY_PORT))
+                sock.sendto(payload, (subnet_broadcast, DISCOVERY_PORT))
             except OSError:
                 pass
             time.sleep(1.0)
