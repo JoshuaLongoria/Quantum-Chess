@@ -89,6 +89,15 @@ def draw_hud(screen: pygame.Surface, pieces: list[dict], tick: int, event_log=No
             rendered = FONT_HUD_B.render(line, True, color)
             screen.blit(rendered, (hud_x + indent, cursor_y))
             cursor_y += 16
+            
+    # --- Display Controls -----------------------------------------
+    hud_section("CONTROLS")
+    hud_line("Q = Superposition", HUD_ACCENT)
+    hud_line("E = Entangle", HUD_ACCENT)
+    hud_line("M = Measure", HUD_ACCENT)
+    hud_line("Esc = Cancel mode", HUD_ACCENT)
+    hud_wrapped("Superposition: select a piece, then choose 2 legal squares.", HUD_TEXT)
+    hud_wrapped("Entangle: select 2 friendly pieces to link them.", HUD_TEXT)
  
     # --- Section: Superposition -----------------------------------------
     hud_section("SUPERPOSITION")
@@ -136,7 +145,6 @@ def draw_hud(screen: pygame.Surface, pieces: list[dict], tick: int, event_log=No
  
     # Pulsing dot to indicate hardware connection status
 
-
     pulse = math.sin(tick * 0.08)
     dot_alpha = int(150 + pulse * 80)
     is_real_hw = backend_label.startswith("IBM Quantum:")
@@ -171,9 +179,3 @@ def _get_entangled_pairs(pieces: list[dict]) -> list[tuple]:
                 seen.add(pair_key)
                 pairs.append((piece, qubit_map[partner_id]))
     return pairs
-
- 
-
-
-
- 
