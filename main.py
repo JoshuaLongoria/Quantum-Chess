@@ -7,7 +7,7 @@ from renderer import render_frame
 from game_manager import GameManager, pixel_to_square
 from lobby import LobbyScreen
 from network import NetworkManager
-from ui_components import draw_hud, get_forfeit_button_rect
+from ui_components import draw_hud, get_forfeit_button_rect, get_restart_button_rect, get_quit_button_rect
 
 # ── CLI args ─────────────────────────────────────────────────────────────────
 parser = argparse.ArgumentParser(description="Quantum Chess")
@@ -77,12 +77,33 @@ while True:
             sys.exit()
 
         elif event.type == pygame.MOUSEBUTTONDOWN:
+            x, y = pygame.mouse.get_pos()
+
+            # --- End-of-game buttons ---
+            if gm.game_over:
+                if get_restart_button_rect().collidepoint(x, y):
+                    gm = GameManager(quantum_mode=args.mode, ibm_backend=args.backend)
+
+                    if args.mode == "ibm" and not gm.engine.is_ibm_connected():
+                        print("Warning: IBM Quantum connection failed, using simulated mode")
+
+                    if net:
+                        role_label = "White" if my_color == "white" else "Black"
+                        gm.log(f"LAN — you are {role_label}  |  peer: {net.peer_ip}")
+
+                    continue
+
+                if get_quit_button_rect().collidepoint(x, y):
+                    if net:
+                        net.stop()
+                    pygame.quit()
+                    sys.exit()
+
+                continue
+
+            # --- Normal in-game clicks ---
             if my_color is None or gm.current_turn == my_color:
-                x, y = pygame.mouse.get_pos()
-
-                forfeit_rect = get_forfeit_button_rect()
-
-                if forfeit_rect.collidepoint(x, y):
+                if get_forfeit_button_rect().collidepoint(x, y):
                     gm.forfeit()
                     if net:
                         net.send({"type": "forfeit"})
