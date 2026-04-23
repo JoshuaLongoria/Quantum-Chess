@@ -26,12 +26,14 @@ from typing import Optional
 from board import Board, to_grid, to_alg
 from constants import BOARD_OFFSET_X, BOARD_OFFSET_Y, SQUARE_SIZE, BOARD_PX
 # Use unified QuantumBackend from Entanglement.py (replaces Quantum_engin.py)
-from Entanglement import QuantumBackend
+from Entanglement import QuantumBackend, IBM_BACKEND
 from quantum_rules import (
     superposition_move,
     collapse_piece,
     entangle_move,
+    break_entanglement_on_capture,
 )
+
 
 
 # -------------------------------------------------------------------------
@@ -77,7 +79,6 @@ class GameManager:
         self.board = Board()
         # quantum_mode: "simulated", "aer", or "ibm"
         # ibm_backend: optional override from config.py
-        from Entanglement import IBM_BACKEND
         backend = ibm_backend or IBM_BACKEND
         self.engine = QuantumBackend(mode=quantum_mode, ibm_backend=backend)
         self.current_turn: str = "white"
@@ -250,7 +251,7 @@ class GameManager:
             # Step 1 — select the piece
             piece = self.board.piece_at(square)
             if piece and piece["color"] == self.current_turn and not piece["superposed"]:
-                if piece.get("entangled_with"):
+                if piece.get("entangled_with") or piece.get("entanglement_group") is not None:
                     self.log(f"{piece['type'].capitalize()} is entangled — cannot split.")
                     return   # no turn loss — just block and wait
                 self._q_piece = piece
@@ -319,12 +320,12 @@ class GameManager:
         if square is None:
             self._cancel_quantum_mode()
             return
-
+        
         piece = self.board.piece_at(square)
         if piece is None or piece["color"] != self.current_turn:
-            self._cancel_quantum_mode()
+            self.log("Select one of your own pieces to entangle.")
             return
-
+        
         if self._q_piece is None:
             self._q_piece = piece
             self.selected_sq = square
@@ -333,6 +334,7 @@ class GameManager:
             if piece is self._q_piece:
                 self.log("Cannot entangle a piece with itself.")
                 return
+            
             msg = entangle_move(self.board, self.engine, self._q_piece, piece)
             self.log(msg)
             self._cancel_quantum_mode()
@@ -388,6 +390,9 @@ class GameManager:
 
         # Classical move / classical capture
         if capture_target and capture_target["color"] != piece["color"]:
+            msg = break_entanglement_on_capture(self.board, capture_target)
+            if msg:
+                self.log(msg)
             cap_symbol = capture_target["type"].capitalize()
             self.log(f"{piece['color'].capitalize()} {symbol} {origin}x{target} (captured {cap_symbol})")
         else:

@@ -50,7 +50,7 @@ def superposition_move(board: Board, engine: QuantumBackend,
     if piece["superposed"]:
         return f"{piece['type'].capitalize()} is already in superposition."
 
-    if piece["entangled_with"]:
+    if piece["entangled_with"] or piece.get("entanglement_group") is not None:
         return f"{piece['type'].capitalize()} is entangled — cannot split."
 
     engine.apply_hadamard(piece["qubit_id"])
@@ -82,6 +82,13 @@ def entangle_move(board: Board, engine: QuantumBackend,
 
     Returns a log string.
     """
+    """
+    MINIMAL FIX FOR quantum_rules.py
+    
+    Replace entangle_move() function with this version that:
+    1. Still does quantum entanglement
+    2. ALSO creates a movement group so pieces share moves
+    """
     # Validate both pieces are classical
     if piece_a["superposed"] or piece_b["superposed"]:
         return "Cannot entangle: one or both pieces are in superposition."
@@ -89,18 +96,53 @@ def entangle_move(board: Board, engine: QuantumBackend,
     if piece_a["entangled_with"] or piece_b["entangled_with"]:
         return "Cannot entangle: one or both pieces are already entangled."
 
-    # Create the Bell state entanglement
+    if piece_a["color"] != piece_b["color"]:
+        return "Cannot entangle: must be your own pieces."
+    
+    if piece_a is piece_b:
+        return "Cannot entangle a piece with itself."
+    
+    if piece_a["type"] == "king" or piece_b["type"] == "king":
+        return "Kings cannot be entangled."
+    
+    # Create QUANTUM entanglement
     engine.entangle(piece_a["qubit_id"], piece_b["qubit_id"])
-
-    # Update piece state
     piece_a["entangled_with"].append(piece_b["qubit_id"])
     piece_b["entangled_with"].append(piece_a["qubit_id"])
-
+    
+    # CREATE MOVEMENT GROUP 
+    from entanglement_rules import EntanglementGroup
+    board.create_entanglement_group([piece_a, piece_b])
+    
     sym_a = piece_a["type"].capitalize()
     sym_b = piece_b["type"].capitalize()
     pos_a = piece_a["positions"][0]
     pos_b = piece_b["positions"][0]
-    return f"Entangled {sym_a}({pos_a}) <-> {sym_b}({pos_b}) [Bell state]"
+    return f"Entangled {sym_a}({pos_a}) <-> {sym_b}({pos_b}) [Bell state + movement group]"
+
+
+def break_entanglement_on_capture(board: Board, captured_piece: dict):
+    """
+    Called when an entangled piece is captured.
+    Breaks both quantum entanglement AND movement group.
+    """
+    # Handle quantum entanglement (old system)
+    if captured_piece.get("entangled_with"):
+        for partner_qubit_id in captured_piece["entangled_with"]:
+            for p in board.pieces:
+                if p["qubit_id"] == partner_qubit_id:
+                    if captured_piece["qubit_id"] in p["entangled_with"]:
+                        p["entangled_with"].remove(captured_piece["qubit_id"])
+        captured_piece["entangled_with"] = []
+    
+    # Handle movement group (new system)
+    group_id = captured_piece.get("entanglement_group")
+    if group_id is not None:
+        from entanglement_rules import break_entanglement
+        msg = break_entanglement(captured_piece, board)
+        return msg if msg else ""
+    
+    return ""
 
 
 # ---------------------------------------------------------------------------

@@ -238,27 +238,29 @@ class QuantumBackend:
     def measure_entangled(self, qubit_id: int) -> tuple[int, dict[int, int]]:
         """
         Measure an entangled qubit and collapse all entangled partners.
-
+        
         Returns:
             tuple: (measured_value, {qubit_id: outcome, ...})
-            All entangled qubits get the SAME outcome (Bell state correlation).
+            All entangled qubits collapse to the same outcome (Bell state correlation).
         """
+        # Get all qubits involved (measured + partners)
+        partners = self.get_entangled_partners(qubit_id)
+        all_qubits = {qubit_id} | partners
+        
         if self._mode == QuantumBackend.IBM:
-            measured, outcomes = self._run_ibm_bell_circuit()
+            measured, _ = self._run_ibm_bell_circuit()
         elif self._mode == QuantumBackend.AER:
-            measured, outcomes = self._run_aer_bell_circuit()
+            measured, _ = self._run_aer_bell_circuit()
         else:
             measured = random.randint(0, 1)
-            outcomes = {qubit_id: measured}
-
-        # All entangled partners collapse to the same value
-        partners = self.get_entangled_partners(qubit_id)
-        for partner_id in partners:
-            outcomes[partner_id] = measured
-
+        
+        # All entangled qubits collapse to the same value
+        outcomes = {q: measured for q in all_qubits}
+        
         # Clear entanglement state after measurement
-        self._clear_entanglement(qubit_id)
-
+        for q in all_qubits:
+            self._clear_entanglement(q)
+        
         return measured, outcomes
 
     def _create_bell_circuit(self) -> QuantumCircuit:
@@ -279,6 +281,12 @@ class QuantumBackend:
         return measured, {0: measured}
 
     def _run_ibm_bell_circuit(self) -> tuple[int, dict[int, int]]:
+        """
+        Execute Bell state circuit on IBM hardware.
+        
+        Note: This measures qubits 0 and 1 in a fresh circuit.
+        In production, you'd map piece.qubit_id -> IBM qubit layout.
+        """
         """Execute Bell state circuit on IBM Quantum hardware via SamplerV2."""
         qc = self._create_bell_circuit()
         isa_qc = self._pass_manager.run(qc)

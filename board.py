@@ -45,6 +45,10 @@ Shared data contract:
 
 from __future__ import annotations
 from typing import Optional
+from entanglement_rules import (EntanglementGroup, 
+                                get_combined_legal_moves, 
+                                break_entanglement,
+                                )
 
 # -------------------------------------------------------------------------
 # Coordinate helpers
@@ -97,6 +101,8 @@ class Board:
         self._square_map: dict[str, dict] = {}
         self._next_qubit_id: int = 0        # auto-increment qubit IDs
         self._setup_initial_position()
+        self._entanglement_groups: dict[int, EntanglementGroup] = {}  # group_id -> group data
+        self._next_group_id = 0  # auto-increment group IDs
 
     # ------------------------------------------------------------------
     # Initial position
@@ -104,6 +110,7 @@ class Board:
 
     def _make_piece(self, ptype: str, color: str, pos: str) -> dict:
         """Create a piece dict that follows the shared data contract."""
+        ## added entanglement_group: None to the piece dict for group management
         piece = {
             "type":           ptype,
             "color":          color,
@@ -111,6 +118,7 @@ class Board:
             "superposed":     False,
             "qubit_id":       self._next_qubit_id,
             "entangled_with": [],
+            "entanglement_group": None,
         }
         self._next_qubit_id += 1
         return piece
@@ -223,6 +231,9 @@ class Board:
 
     def remove_piece(self, piece: dict):
         """Remove *piece* from the board (capture / collapse away)."""
+        from quantum_rules import break_entanglement_on_capture
+        msg = break_entanglement_on_capture(self, piece)
+
         if piece in self.pieces:
             self.pieces.remove(piece)
         self._rebuild_map()
@@ -273,51 +284,40 @@ class Board:
     # ------------------------------------------------------------------
 
     def get_legal_moves(self, piece: dict) -> list[str]:
-        """
-        Return all legal destination squares for *piece*.
-
-        A move is legal if:
-          1. It follows the piece's movement pattern.
-          2. It does not leave the player's own king in check.
-
-        For superposed pieces we generate moves from the FIRST listed
-        position (the "primary" square).  quantum_rules.py handles the
-        special case of splitting into two squares.
-        """
-        if not piece["positions"]:
+        """Get legal moves, accounting for entanglement."""
+        if piece.get("superposed"):
             return []
-
-        origin = piece["positions"][0]
-        pseudo = self._pseudo_legal_moves(piece, origin)
-
-        legal: list[str] = []
-        for target in pseudo:
-            if self._is_move_safe(piece, origin, target):
-                legal.append(target)
-        return legal
-
+        
+        group_id = piece.get("entanglement_group")
+        if group_id is None:
+            return self.get_legal_moves_single_type(piece["type"], piece["positions"][0], piece["color"])
+        return get_combined_legal_moves(piece, self)
+    
     # ------------------------------------------------------------------
     # Pseudo-legal generation (ignores check legality)
     # ------------------------------------------------------------------
 
-    def _pseudo_legal_moves(self, piece: dict, origin: str) -> list[str]:
-        """Moves that follow piece geometry but may leave king in check."""
-        ptype = piece["type"]
-        if ptype == "pawn":
-            return self._pawn_moves(piece, origin)
-        elif ptype == "knight":
-            return self._knight_moves(piece, origin)
-        elif ptype == "bishop":
-            return self._sliding_moves(piece, origin, _BISHOP_DIRS)
-        elif ptype == "rook":
-            return self._sliding_moves(piece, origin, _ROOK_DIRS)
-        elif ptype == "queen":
-            return self._sliding_moves(piece, origin, _QUEEN_DIRS)
-        elif ptype == "king":
-            return self._king_moves(piece, origin)
+    def get_legal_moves_single_type(self, piece_type: str, origin: str, color: str) -> list[str]:
+        """Get moves for a piece type from a square."""
+        #create a dummy piece dict to reuse existing move generation logic
+        temp_piece = {"type": piece_type, "color": color}
+    
+        if piece_type == "pawn":
+            return self._pawn_moves(temp_piece, origin)
+        elif piece_type == "rook":
+            return self._sliding_moves(temp_piece, origin, _ROOK_DIRS)
+        elif piece_type == "bishop":
+            return self._sliding_moves(temp_piece, origin, _BISHOP_DIRS)
+        elif piece_type == "knight":
+            return self._knight_moves(temp_piece, origin)
+        elif piece_type == "queen":
+            return self._sliding_moves(temp_piece, origin, _QUEEN_DIRS)
+        elif piece_type == "king":
+            return self._king_moves(temp_piece, origin)
+        
         return []
 
-    # --- directional constants (module-level aliases used below) ---------
+        # --- directional constants (module-level aliases used below) ---------
 
     # --- individual piece movers -----------------------------------------
 
@@ -417,10 +417,24 @@ class Board:
         for pawns — pawns attack diagonally, not forward).
         """
         ptype = piece["type"]
+        color = piece["color"]
+        
         if ptype == "pawn":
             return self._pawn_attacks(piece, origin)
-        # For every other piece, attacks == pseudo-legal destinations
-        return self._pseudo_legal_moves(piece, origin)
+        
+        # Switch based on the piece type to call the existing internal helpers
+        if ptype == "rook":
+            return self._sliding_moves(piece, origin, _ROOK_DIRS)
+        elif ptype == "bishop":
+            return self._sliding_moves(piece, origin, _BISHOP_DIRS)
+        elif ptype == "queen":
+            return self._sliding_moves(piece, origin, _QUEEN_DIRS)
+        elif ptype == "knight":
+            return self._knight_moves(piece, origin)
+        elif ptype == "king":
+            return self._king_moves(piece, origin)
+            
+        return []
 
     def _pawn_attacks(self, piece: dict, origin: str) -> list[str]:
         """Squares a pawn threatens (diagonals only, regardless of occupancy)."""
@@ -480,13 +494,44 @@ class Board:
         "pieces" key of the game_state dict.
         """
         return self.pieces
+    # ------------------------------------------------------------------
+    # Entanglement group management
+    # ------------------------------------------------------------------
+
+    # Note: The board manages entanglement groups, but the quantum_rules
+    # module handles the logic of creating, merging, and breaking them based
 
     def next_qubit_id(self) -> int:
         """Reserve and return the next available qubit ID."""
         qid = self._next_qubit_id
         self._next_qubit_id += 1
         return qid
+    def create_entanglement_group(self, pieces: list[dict]) -> EntanglementGroup:
+        group_id = self._next_group_id
+        self._next_group_id += 1
+        group = EntanglementGroup(group_id, pieces)
+        self._entanglement_groups[group_id] = group
+        for piece in pieces:
+            piece["entanglement_group"] = group_id
+        return group
 
+    def get_entanglement_group(self, group_id: int) -> EntanglementGroup | None:
+        return self._entanglement_groups.get(group_id)
+
+    def merge_entanglement_groups(self, group_id_a: int, group_id_b: int) -> EntanglementGroup:
+        group_a = self._entanglement_groups.get(group_id_a)
+        group_b = self._entanglement_groups.get(group_id_b)
+        if not group_a or not group_b:
+            return None
+        for piece in group_b.pieces:
+            piece["entanglement_group"] = group_id_a
+            group_a.add_piece(piece)
+        del self._entanglement_groups[group_id_b]
+        return group_a
+
+    def remove_entanglement_group(self, group_id: int):
+        if group_id in self._entanglement_groups:
+            del self._entanglement_groups[group_id]
 
 # =========================================================================
 # Standalone test — run with:  python board.py
