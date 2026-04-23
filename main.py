@@ -7,7 +7,7 @@ from renderer import render_frame
 from game_manager import GameManager, pixel_to_square
 from lobby import LobbyScreen
 from network import NetworkManager
-from ui_components import draw_hud, get_forfeit_button_rect, get_restart_button_rect, get_quit_button_rect
+from ui_components import get_forfeit_button_rect, get_restart_button_rect, get_quit_button_rect
 
 # ── CLI args ─────────────────────────────────────────────────────────────────
 parser = argparse.ArgumentParser(description="Quantum Chess")
@@ -60,6 +60,10 @@ while True:
 # ── Phase 2: Game setup ───────────────────────────────────────────────────────
 gm = GameManager(quantum_mode=args.mode, ibm_backend=args.backend)
 
+white_time = 10 * 60 * 1000   # 10 minutes in milliseconds
+black_time = 10 * 60 * 1000
+last_tick_ms = pygame.time.get_ticks()
+
 if args.mode == "ibm" and not gm.engine.is_ibm_connected():
     print("Warning: IBM Quantum connection failed, using simulated mode")
 
@@ -83,6 +87,10 @@ while True:
             if gm.game_over:
                 if get_restart_button_rect().collidepoint(x, y):
                     gm = GameManager(quantum_mode=args.mode, ibm_backend=args.backend)
+
+                    white_time = 10 * 60 * 1000
+                    black_time = 10 * 60 * 1000
+                    last_tick_ms = pygame.time.get_ticks()
 
                     if args.mode == "ibm" and not gm.engine.is_ibm_connected():
                         print("Warning: IBM Quantum connection failed, using simulated mode")
@@ -115,14 +123,7 @@ while True:
 
                 if net and sq:
                     measure_fired = was_measure and gm.quantum_mode is None
-                    if gm._last_capture_result is not None:
-                        # Ghost capture — send the quantum result so peer gets same outcome
-                        net.send({
-                            "type":   "quantum_capture",
-                            "square": sq,
-                            "result": gm._last_capture_result,
-                        })
-                    elif measure_fired:
+                    if measure_fired:
                         net.send({
                             "type": "measure_click",
                             "square": sq,
@@ -158,10 +159,7 @@ while True:
             if t == "click":
                 gm.handle_square(msg.get("square"))
             elif t == "measure_click":
-                gm.engine.seed_next_result(msg.get("result", 0))
-                gm.handle_square(msg.get("square"))
-            elif t == "quantum_capture":
-                # Seed so both peers collapse the ghost to the same square
+                # Seed the engine so both sides collapse to the same square
                 gm.engine.seed_next_result(msg.get("result", 0))
                 gm.handle_square(msg.get("square"))
             elif t == "key":
@@ -177,8 +175,28 @@ while True:
             gm.game_over  = True
             gm.game_result = "Opponent disconnected."
 
+    now_ms = pygame.time.get_ticks()
+    delta_ms = now_ms - last_tick_ms
+    last_tick_ms = now_ms
+
+    if not gm.game_over:
+        if gm.current_turn == "white":
+            white_time = max(0, white_time - delta_ms)
+            if white_time == 0:
+                gm.game_over = True
+                gm.game_result = "White ran out of time -- Black wins!"
+                gm.log(gm.game_result)
+        else:
+            black_time = max(0, black_time - delta_ms)
+            if black_time == 0:
+                gm.game_over = True
+                gm.game_result = "Black ran out of time -- White wins!"
+                gm.log(gm.game_result)
+
     # ── Render ────────────────────────────────────────────────────────────────
     game_state = gm.get_game_state()
+    game_state["white_time_ms"] = white_time
+    game_state["black_time_ms"] = black_time
     render_frame(screen, game_state, tick)
 
     pygame.display.flip()
