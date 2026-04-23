@@ -397,4 +397,5 @@ def render_frame(screen: pygame.Surface, game_state: dict, tick: int):
  
     # 8. HUD panel
     draw_hud(screen, pieces, tick, event_log=game_state.get("event_log"),
-             backend_label=game_state.get("backend_label", "Simulator (local)"))
+            backend_label=game_state.get("backend_label", "Simulator (local)"), current_turn=game_state.get("current_turn", "white"),
+            game_result=game_state.get("game_result", ""))
