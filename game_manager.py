@@ -41,15 +41,20 @@ from quantum_rules import (
 # Pixel-to-board conversion
 # -------------------------------------------------------------------------
 
-def pixel_to_square(px: int, py: int) -> Optional[str]:
+def pixel_to_square(px: int, py: int, flipped: bool = False) -> Optional[str]:
     """
     Convert a pixel coordinate (from a mouse click) to an algebraic square.
 
     Returns None if the click is outside the board area.
+    When flipped is True (black player in LAN), the screen coordinates are
+    mirrored to match the flipped board orientation.
     """
     col = (px - BOARD_OFFSET_X) // SQUARE_SIZE
     row = (py - BOARD_OFFSET_Y) // SQUARE_SIZE
     if 0 <= col < 8 and 0 <= row < 8:
+        if flipped:
+            col = 7 - col
+            row = 7 - row
         return to_alg(col, row)
     return None
 
@@ -176,7 +181,7 @@ class GameManager:
     # Click handling — dispatches to classical or quantum path
     # ------------------------------------------------------------------
 
-    def handle_click(self, px: int, py: int):
+    def handle_click(self, px: int, py: int, flipped: bool = False):
         """
         Process a mouse click at pixel coordinates (px, py).
 
@@ -186,7 +191,7 @@ class GameManager:
         if self.game_over:
             return
 
-        square = pixel_to_square(px, py)
+        square = pixel_to_square(px, py, flipped)
 
         if self.quantum_mode == "superposition":
             self._handle_superposition_click(square)

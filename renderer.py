@@ -39,21 +39,27 @@ from ui_components import draw_hud, _get_entangled_pairs
 # ---------------------------------------------------------------------------
 # Coordinate helpers
 # ---------------------------------------------------------------------------
- 
+
+# Set to True when the local player is Black (LAN mode) to flip the board.
+_board_flipped: bool = False
+
 def square_to_pixel(col: int, row: int) -> tuple[int, int]:
     """
     Convert board grid coordinates to pixel coordinates (top-left of that square).
- 
-    Board uses (col, row) where col 0 = 'a' file, row 0 = rank 8 (top of screen).
-    So row increases downward on screen, matching Pygame's Y axis.
- 
+
+    When _board_flipped is True (black player in LAN), the board is mirrored
+    so that black's pieces appear at the bottom of the screen.
+
     Args:
         col: Board column 0-7 (left to right, a-h)
         row: Board row 0-7 (top to bottom, rank 8 to rank 1)
- 
+
     Returns:
         (pixel_x, pixel_y) of the square's top-left corner
     """
+    if _board_flipped:
+        col = 7 - col
+        row = 7 - row
     x = BOARD_OFFSET_X + col * SQUARE_SIZE
     y = BOARD_OFFSET_Y + row * SQUARE_SIZE
     return x, y
@@ -101,11 +107,11 @@ def draw_board(screen: pygame.Surface):
 def draw_coordinates(screen: pygame.Surface):
     """
     Draw file letters (a-h) below the board and rank numbers (1-8) to the left.
- 
+
     These help players identify squares during the game and presentation.
     """
-    files = "abcdefgh"
-    ranks = "87654321"   # rank 8 is at the top (row 0), rank 1 at the bottom
+    files = "hgfedcba" if _board_flipped else "abcdefgh"
+    ranks = "12345678" if _board_flipped else "87654321"
  
     for i in range(8):
         # File labels below the board
@@ -331,8 +337,13 @@ def draw_player_timers(screen: pygame.Surface, white_time_ms: int, black_time_ms
     top_y = BOARD_OFFSET_Y - 52
     bottom_y = BOARD_OFFSET_Y + BOARD_PX + 25
 
-    black_rect = pygame.Rect(box_x, top_y, box_w, box_h)
-    white_rect = pygame.Rect(box_x, bottom_y, box_w, box_h)
+    # When flipped (black player POV), white timer is at top and black at bottom
+    if _board_flipped:
+        white_rect = pygame.Rect(box_x, top_y, box_w, box_h)
+        black_rect = pygame.Rect(box_x, bottom_y, box_w, box_h)
+    else:
+        black_rect = pygame.Rect(box_x, top_y, box_w, box_h)
+        white_rect = pygame.Rect(box_x, bottom_y, box_w, box_h)
 
     black_fill = (70, 70, 70) 
     white_fill = (255, 255, 255)
@@ -359,7 +370,7 @@ def draw_player_timers(screen: pygame.Surface, white_time_ms: int, black_time_ms
  
  
 # render_frame is the main function Person C will call from main.py each frame to draw everything.
-def render_frame(screen: pygame.Surface, game_state: dict, tick: int):  
+def render_frame(screen: pygame.Surface, game_state: dict, tick: int, flipped: bool = False):
     """
     Render one complete frame of the Quantum Chess game.
  
@@ -386,11 +397,14 @@ def render_frame(screen: pygame.Surface, game_state: dict, tick: int):
               "check_king"   : algebraic pos of king in check (or None)
         tick: Current frame counter (for animations).
     """
+    global _board_flipped
+    _board_flipped = flipped
+
     pieces      = game_state.get("pieces", [])
     selected    = game_state.get("selected", None)
     valid_moves = game_state.get("valid_moves", [])
     check_king  = game_state.get("check_king", None)
- 
+
     # 1. Background
     screen.fill(BG_COLOR)
  

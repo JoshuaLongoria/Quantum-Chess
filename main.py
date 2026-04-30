@@ -57,6 +57,9 @@ while True:
     clock.tick(60)
     tick += 1
 
+# Board is flipped when the local player controls black in a LAN game
+flipped = (my_color == "black")
+
 # ── Phase 2: Game setup ───────────────────────────────────────────────────────
 gm = GameManager(quantum_mode=args.mode, ibm_backend=args.backend)
 
@@ -117,9 +120,9 @@ while True:
                         net.send({"type": "forfeit"})
                     continue
 
-                sq = pixel_to_square(x, y)
+                sq = pixel_to_square(x, y, flipped)
                 was_measure = (gm.quantum_mode == "measure")
-                gm.handle_click(x, y)
+                gm.handle_click(x, y, flipped)
 
                 if net and sq:
                     measure_fired = was_measure and gm.quantum_mode is None
@@ -197,7 +200,7 @@ while True:
     game_state = gm.get_game_state()
     game_state["white_time_ms"] = white_time
     game_state["black_time_ms"] = black_time
-    render_frame(screen, game_state, tick)
+    render_frame(screen, game_state, tick, flipped)
 
     pygame.display.flip()
     clock.tick(60)
